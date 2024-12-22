@@ -1,12 +1,14 @@
+import { getRandomNumber, getRandomText } from './utility.js';
+
 // Function to generate random sample data
 function generateSampleData(inputString: string): { data: string[][], rows: number } {
-    const rows = Math.floor(Math.random() * 10) + 5; // 5-15 rows
+    const rows = getRandomNumber(10) + 5; // 5-15 rows
     const cols = 3; // Fixed number of columns
     const data: string[][] = [["Input", "Random Number", "Random Text"]];
 
     for (let i = 0; i < rows; i++) {
-        const randomNum = Math.floor(Math.random() * 1000);
-        const randomText = Math.random().toString(36).substring(7);
+        const randomNum = getRandomNumber(1000);
+        const randomText = getRandomText();
         data.push([inputString, randomNum.toString(), randomText]);
     }
     return { data, rows };
