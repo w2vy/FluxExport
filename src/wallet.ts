@@ -64,7 +64,7 @@ interface vsum {
   [key: string]: number;
 }
 
-const single:boolean = true;
+const single:boolean = false;
 
 function formatTimestamp(epochTime: number): string {
   const edate = new Date(epochTime * 1000); // Multiply by 1000 to convert seconds to milliseconds
@@ -112,6 +112,12 @@ function send_csv(
   recv_comment: string, send_qty: any, send_coin: string, send_usd: any, send_name: string, send_adr: string, send_comment: string, gas_fee: any,
   gas_coin: string, gas_usd: any
 ): void {
+  if (typeof recv_usd === "number" && recv_usd as number > 0 && recv_usd as number < 0.0001) recv_usd = 0;
+  if (typeof send_usd === "number" && send_usd as number > 0 && send_usd as number < 0.0001) send_usd = 0;
+  if (typeof gas_usd === "number" && gas_usd as number > 0 && gas_usd as number < 0.0001) gas_usd = 0;
+  if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = (recv_qty/100000000).toFixed(8);
+  if (typeof send_qty === "number" && send_qty > 0) send_qty = (send_qty/100000000).toFixed(8);
+  if (typeof gas_fee === "number" && gas_fee > 0) gas_fee = (gas_fee/100000000).toFixed(8);
   const csvRow = [
     date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
     send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd
@@ -181,9 +187,9 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
         if (vin.address === undefined) mined = true;
         else {
           if (vin.address === myAddress) hasVin = true;
-          if (vinsum[vin.address] === undefined) vinsum[vin.address] = vin.value;
-          else vinsum[vin.address] = vinsum[vin.address] + vin.value;
-          vinTotal = vinTotal + vin.value;
+          if (vinsum[vin.address] === undefined) vinsum[vin.address] = vin.valueSat;
+          else vinsum[vin.address] = vinsum[vin.address] + vin.valueSat;
+          vinTotal = vinTotal + vin.valueSat;
         }
       });
     }
@@ -193,19 +199,13 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
             vout.scriptPubKey.addresses.forEach(outAdr => {
               if (outAdr === myAddress) hasVout = true;
               else voutAllMe = false;
-              if (voutList[outAdr] === undefined) voutList[outAdr] = vout.value;
-              else voutList[outAdr] = voutList[outAdr] + vout.value;
-              voutTotal = voutTotal + vout.value;
+              if (voutList[outAdr] === undefined) voutList[outAdr] = vout.valueSat;
+              else voutList[outAdr] = voutList[outAdr] + vout.valueSat;
+              voutTotal = voutTotal + vout.valueSat;
             });
           }
       });
     }
-    if (single) {
-      console.log(`vin sum`);console.log(vinsum);
-      console.log(`vout List`);console.log(voutList);
-      console.log(`has vin ${hasVin} out ${hasVout}`)
-    }
-
     //console.log(`Time is ${txn.data.time}`);
     var coin_value:number = 0.75;
     var msg: string = "";
@@ -226,6 +226,12 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
     var gas_coin: string = "";
     var gas_usd: number = 0;
 
+    if (single) {
+      console.log(`vin sum`);console.log(vinsum);
+      console.log(`vout List`);console.log(voutList);
+      console.log(`has vin ${hasVin} out ${hasVout} All Me ${voutAllMe} Gas ${gas_fee}`)
+    }
+
     const date:string = formatTimestamp(txn.data.time);
     if (hasVin && hasVout && voutAllMe) { // Sent to self (same wallet)
       type = "SENT";
@@ -235,14 +241,14 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
       send_adr = myAddress;
       recv_adr = myAddress;
       gas_coin = "FLUX";
-      gas_usd = gas_fee*coin_value;
+      gas_usd = gas_fee*coin_value/100000000;
       send_csv(date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
         send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
     } else if (mined) {
       type = "MINED";
       recv_qty = voutList[myAddress];
       recv_coin = "FLUX";
-      recv_usd = recv_qty*coin_value;
+      recv_usd = recv_qty*coin_value/100000000;
       gas_fee = 0;
       gas_usd = 0;
       //console.log(`Mined ${date}`);
@@ -256,18 +262,18 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
         msg = `From Addresses: ${Object.keys(vinsum).join(", ")}`;
       }
       if (hasVin) {
-        type = "SEND";
+        type = "SENT";
         Object.keys(voutList).forEach(outAdr => {
           if (outAdr !== myAddress) {
             send_qty = voutList[outAdr];
             send_coin = "FLUX";
-            send_usd = send_qty * coin_value;
+            send_usd = send_qty * coin_value/100000000;
             send_comment = msg;
             gas_coin = "FLUX";
-            gas_usd = (gas_fee as number) * coin_value;
+            gas_usd = (gas_fee as number) * coin_value/100000000;
     
             send_csv(date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-              send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+              send_qty, send_coin, send_usd, send_name, outAdr, send_comment, gas_fee, gas_coin, gas_usd);
             gas_fee = 0;
           }
         });
@@ -277,7 +283,7 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
           if (outAdr === myAddress) {
             recv_qty = voutList[outAdr];
             recv_coin = "FLUX";
-            recv_usd = recv_qty * coin_value;
+            recv_usd = recv_qty * coin_value/10000000;
             recv_comment = msg;
             gas_fee = ''; // No fee to  receive
             send_csv(date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
@@ -308,18 +314,18 @@ async function scanWalletData(responseData: string, myAddress:string) {
       return;
     }
 
-    console.log(`Status: ${txns.status}`);
-    console.log(`There are ${txns.data.length} transactions.`);
+    //console.log(`Status: ${txns.status}`);
+    //console.log(`There are ${txns.data.length} transactions.`);
 
     if (false) {
       await Promise.all(txns.data.map((txn, index) => decodeTransaction(index + 1, txn.txid, myAddress)));
     } else {
       for (const [index, txn] of txns.data.entries()) {
-        console.log(`Transaction ${index}: TXID: ${txn.txid}`);
+        //console.log(`Transaction ${index}: TXID: ${txn.txid}`);
         await decodeTransaction(index, txn.txid, myAddress);
       }
     }
-    console.log("Done.");
+    //console.log("Done.");
   } catch (error) {
     console.error("Error parsing or processing wallet data:", error);
   }
@@ -342,7 +348,6 @@ if (!single) main();
 else {
   // test these
   // 9515af7448b32855bd84246a50d39c36477597bda37a67513e4730ae1591ae54 send payment, ignore myAddress
-  // ec0a813a371397d10ab6327479f6e57a36a66742bdb7930714444c081baa4caf I send a bunch to a wallet
   const txid = '9515af7448b32855bd84246a50d39c36477597bda37a67513e4730ae1591ae54';
   const vin1 = 't1NQRqtQW3bbRP6oSNsvXyBMUrjVJUpcBXb';
   const vout1 = 't1a2Vh8pSR5yaLh6DYeGt2LpMX3PTuBgauo';
