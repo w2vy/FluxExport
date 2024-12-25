@@ -65,8 +65,16 @@ interface vsum {
 }
 
 const single:boolean = false;
+const Address = 't10000000000000';
 
-function formatTimestamp(epochTime: number): string {
+enum CSVFormat {
+  CoinTracker = "CoinTracker",
+  CoinTrackerExport = "CoinTrackerExport"
+}
+
+let csvFormat: string = CSVFormat.CoinTracker;
+
+function formatTimestamp(epochTime: number, usa: boolean): string {
   const edate = new Date(epochTime * 1000); // Multiply by 1000 to convert seconds to milliseconds
 
   const day = String(edate.getDate()).padStart(2, '0');
@@ -77,7 +85,12 @@ function formatTimestamp(epochTime: number): string {
   const minutes = String(edate.getMinutes()).padStart(2, '0');
   const seconds = String(edate.getSeconds()).padStart(2, '0');
 
-  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+  if (usa) return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+  else return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+}
+
+function trimZeros(input: string): string {
+  return input.replace(/\.?0+$/, ""); // Remove trailing zeros and an optional decimal point if there are no digits left after it
 }
 
 async function fetchWebPageData(url: string): Promise<string | null> {
@@ -107,17 +120,32 @@ function isValidTxid(txid: string): boolean {
   return txid.length === requiredLength && hexRegex.test(txid);
 }
 
-function send_csv(
-  date: string, type: string, txid: string, recv_qty: string | number, recv_coin: string, recv_usd: number | string, recv_name: string, recv_adr: string,
+function send_csv_ct(
+  dateTime: number, recv_qty: string | number, recv_coin: string, send_qty: any, send_coin: string, gas_fee: string | number,
+  gas_coin: string, tag: string
+): void {
+  const date:string = formatTimestamp(dateTime, true);
+  if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
+  if (typeof send_qty === "number" && send_qty > 0) send_qty = trimZeros((send_qty/100000000).toFixed(8));
+  if (typeof gas_fee === "number" && gas_fee > 0) gas_fee = trimZeros((gas_fee/100000000).toFixed(8));
+  const csvRow = [
+    date, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, tag
+  ].join(",");
+  console.log(csvRow);
+}
+
+function send_csv_ctExport(
+  dateTime: number, type: string, txid: string, recv_qty: string | number, recv_coin: string, recv_usd: number | string, recv_name: string, recv_adr: string,
   recv_comment: string, send_qty: any, send_coin: string, send_usd: any, send_name: string, send_adr: string, send_comment: string, gas_fee: any,
   gas_coin: string, gas_usd: any
 ): void {
+  const date:string = formatTimestamp(dateTime, false);
   if (typeof recv_usd === "number" && recv_usd as number > 0 && recv_usd as number < 0.0001) recv_usd = 0;
   if (typeof send_usd === "number" && send_usd as number > 0 && send_usd as number < 0.0001) send_usd = 0;
   if (typeof gas_usd === "number" && gas_usd as number > 0 && gas_usd as number < 0.0001) gas_usd = 0;
-  if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = (recv_qty/100000000).toFixed(8);
-  if (typeof send_qty === "number" && send_qty > 0) send_qty = (send_qty/100000000).toFixed(8);
-  if (typeof gas_fee === "number" && gas_fee > 0) gas_fee = (gas_fee/100000000).toFixed(8);
+  if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
+  if (typeof send_qty === "number" && send_qty > 0) send_qty = trimZeros((send_qty/100000000).toFixed(8));
+  if (typeof gas_fee === "number" && gas_fee > 0) gas_fee = trimZeros((gas_fee/100000000).toFixed(8));
   const csvRow = [
     date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
     send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd
@@ -232,7 +260,8 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
       console.log(`has vin ${hasVin} out ${hasVout} All Me ${voutAllMe} Gas ${gas_fee}`)
     }
 
-    const date:string = formatTimestamp(txn.data.time);
+    const dateTime: number = txn.data.time;
+
     if (hasVin && hasVout && voutAllMe) { // Sent to self (same wallet)
       type = "SENT";
       send_qty = 0;
@@ -242,8 +271,15 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
       recv_adr = myAddress;
       gas_coin = "FLUX";
       gas_usd = gas_fee*coin_value/100000000;
-      send_csv(date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-        send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+      if (gas_fee > 0) { // if qty and gas 0, nothing to see here
+        if (csvFormat === CSVFormat.CoinTrackerExport) {
+          send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+            send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+        }
+        if (csvFormat === CSVFormat.CoinTracker) {
+          send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "");
+        }
+      }
     } else if (mined) {
       type = "MINED";
       recv_qty = voutList[myAddress];
@@ -252,8 +288,13 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
       gas_fee = 0;
       gas_usd = 0;
       //console.log(`Mined ${date}`);
-      send_csv(date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-        send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+      if (csvFormat === CSVFormat.CoinTrackerExport) {
+        send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+          send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+      }
+      if (csvFormat === CSVFormat.CoinTracker) {
+        send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "mining");
+      }
     } else { // 
       if (Object.keys(vinsum).length == 1) {
         send_adr = Object.keys(vinsum)[0];
@@ -272,8 +313,13 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
             gas_coin = "FLUX";
             gas_usd = (gas_fee as number) * coin_value/100000000;
     
-            send_csv(date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-              send_qty, send_coin, send_usd, send_name, outAdr, send_comment, gas_fee, gas_coin, gas_usd);
+            if (csvFormat === CSVFormat.CoinTrackerExport) {
+              send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+                send_qty, send_coin, send_usd, send_name, outAdr, send_comment, gas_fee, gas_coin, gas_usd);
+            }
+            if (csvFormat === CSVFormat.CoinTracker) {
+              send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "");
+            }
             gas_fee = 0;
           }
         });
@@ -283,11 +329,16 @@ async function decodeTransaction(i: number, txid: string, myAddress:string) {
           if (outAdr === myAddress) {
             recv_qty = voutList[outAdr];
             recv_coin = "FLUX";
-            recv_usd = recv_qty * coin_value/10000000;
+            recv_usd = recv_qty * coin_value/100000000;
             recv_comment = msg;
             gas_fee = ''; // No fee to  receive
-            send_csv(date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-              send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+            if (csvFormat === CSVFormat.CoinTrackerExport) {
+              send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+                send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+            }
+            if (csvFormat === CSVFormat.CoinTracker) {
+              send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "");
+            }
           }
         });
       } else {
@@ -316,6 +367,9 @@ async function scanWalletData(responseData: string, myAddress:string) {
 
     //console.log(`Status: ${txns.status}`);
     //console.log(`There are ${txns.data.length} transactions.`);
+    if (csvFormat === CSVFormat.CoinTracker) {
+      console.log("Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag");
+    }
 
     if (false) {
       await Promise.all(txns.data.map((txn, index) => decodeTransaction(index + 1, txn.txid, myAddress)));
@@ -332,25 +386,18 @@ async function scanWalletData(responseData: string, myAddress:string) {
 }
 
 async function main() {
-  //const myAddress = 't1gdhHCLAxe16P4yt39DBqVZoq9hhgDsoYX';
-  const myAddress = 't1UHecy6WiSJXs4Zqt5UvVdRDF7PMbZJK7q';
-  const url = "https://api.runonflux.io/explorer/transactions/" + myAddress;
+  if (single) {
+    const txid = 'xxxxxxx';
+    decodeTransaction(1, txid, Address);
+    return;
+  }
+
+  const url = "https://api.runonflux.io/explorer/transactions/" + Address;
   const responseData = await fetchWebPageData(url);
 
   if (responseData) {
-    scanWalletData(responseData, myAddress);
+    scanWalletData(responseData, Address);
   } else {
     console.log("Failed to retrieve data.");
   }
-}
-
-if (!single) main();
-else {
-  // test these
-  // 9515af7448b32855bd84246a50d39c36477597bda37a67513e4730ae1591ae54 send payment, ignore myAddress
-  const txid = '9515af7448b32855bd84246a50d39c36477597bda37a67513e4730ae1591ae54';
-  const vin1 = 't1NQRqtQW3bbRP6oSNsvXyBMUrjVJUpcBXb';
-  const vout1 = 't1a2Vh8pSR5yaLh6DYeGt2LpMX3PTuBgauo';
-  const myAddress = 't1UHecy6WiSJXs4Zqt5UvVdRDF7PMbZJK7q';
-  decodeTransaction(995, txid, myAddress);
 }
