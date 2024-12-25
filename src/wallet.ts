@@ -64,33 +64,87 @@ interface vsum {
   [key: string]: number;
 }
 
-const single:boolean = false;
-const Address = 't10000000000000';
+// wallet.ts
 
-enum CSVFormat {
+export enum CSVFormat {
   CoinTracker = "CoinTracker",
-  CoinTrackerExport = "CoinTrackerExport"
+  CoinTrackerExport = "CoinTrackerExport",
 }
 
-let csvFormat: string = CSVFormat.CoinTracker;
+export let single: boolean = false;
+export let Address: string = "";
+export let csvFormat: CSVFormat = CSVFormat.CoinTracker;
+export let testTxid: string = "";
 
-function formatTimestamp(epochTime: number, usa: boolean): string {
-  const edate = new Date(epochTime * 1000); // Multiply by 1000 to convert seconds to milliseconds
-
-  const day = String(edate.getDate()).padStart(2, '0');
-  const month = String(edate.getMonth() + 1).padStart(2, '0'); // Months are 0-based
-  const year = edate.getFullYear();
-
-  const hours = String(edate.getHours()).padStart(2, '0');
-  const minutes = String(edate.getMinutes()).padStart(2, '0');
-  const seconds = String(edate.getSeconds()).padStart(2, '0');
-
-  if (usa) return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
-  else return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+// Setter functions
+export function setSingle(value: boolean): void {
+  single = value;
 }
 
-function trimZeros(input: string): string {
-  return input.replace(/\.?0+$/, ""); // Remove trailing zeros and an optional decimal point if there are no digits left after it
+export function setAddress(value: string): void {
+  Address = value;
+}
+
+export function setTestTxid(value: string): void {
+  testTxid = value;
+}
+
+export function setCsvFormat(value: CSVFormat): void {
+  csvFormat = value;
+}
+
+// Utility to format date to epoch time
+export function parseDateToEpoch(dateStr: string): number {
+  const [month, day, year] = dateStr.split("/").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (isNaN(date.getTime())) {
+    throw new Error(`Invalid date format: ${dateStr}`);
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
+// Existing functions from wallet.ts
+export function formatTimestamp(epochTime: number, usa: boolean): string {
+  const date = new Date(epochTime * 1000);
+  const options: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  };
+  return usa
+    ? date.toLocaleString("en-US", options)
+    : date.toLocaleString("en-GB", options);
+}
+
+export function trimZeros(input: string): string {
+  return input.replace(/\.?0+$/, "");
+}
+
+export async function getwallet(): Promise<void> {
+  console.log("Starting wallet operation...");
+
+  if (single) {
+    // Perform wallet operations here
+    // Example: Decoding a transaction
+    try {
+      await decodeTransaction(0, testTxid, Address);
+    } catch (error) {
+      console.error("Error during wallet operation:", error);
+    }
+  } else {
+    const url = "https://api.runonflux.io/explorer/transactions/" + Address;
+    const responseData = await fetchWebPageData(url);
+  
+    if (responseData) {
+      scanWalletData(responseData, Address);
+    } else {
+      console.log("Failed to retrieve data.");
+    }
+  }
+  console.log("Wallet operation completed.");
 }
 
 async function fetchWebPageData(url: string): Promise<string | null> {
@@ -382,22 +436,5 @@ async function scanWalletData(responseData: string, myAddress:string) {
     //console.log("Done.");
   } catch (error) {
     console.error("Error parsing or processing wallet data:", error);
-  }
-}
-
-async function main() {
-  if (single) {
-    const txid = 'xxxxxxx';
-    decodeTransaction(1, txid, Address);
-    return;
-  }
-
-  const url = "https://api.runonflux.io/explorer/transactions/" + Address;
-  const responseData = await fetchWebPageData(url);
-
-  if (responseData) {
-    scanWalletData(responseData, Address);
-  } else {
-    console.log("Failed to retrieve data.");
   }
 }

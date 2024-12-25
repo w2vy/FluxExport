@@ -2,16 +2,21 @@
   "name": "fluxexport",
   "version": "1.0.0",
   "main": "index.js",
-"scripts": {
-  "build": "tsc",
-  "start": "live-server src"
-},
+  "scripts": {
+    "build": "tsc",
+    "start": "live-server src"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
     "live-server": "^1.2.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/yargs": "^17.0.33"
   }
 }
