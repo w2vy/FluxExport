@@ -3,35 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flux Export</title>
-  <link rel="stylesheet" href="./src/styles.css">
-  <script type="module" src="./dist/script.js" defer></script>
+  <title>FluxExport</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Flux Export Tool</h1>
-    <form id="walletForm">
-      <label for="address">Wallet Address:</label>
-      <input type="text" id="address" name="address" placeholder="Enter Wallet Address" required />
-
-      <label for="csvFormat">CSV Format:</label>
-      <select id="csvFormat" name="csvFormat" required>
-        <option value="CoinTracker">CoinTracker</option>
-        <option value="CoinTrackerExport">CoinTracker Export</option>
-      </select>
-
-      <label for="startDate">Start Date:</label>
-      <input type="datetime-local" id="startDate" name="startDate" required />
-
-      <label for="endDate">End Date:</label>
-      <input type="datetime-local" id="endDate" name="endDate" required />
-
-      <label for="filename">File Name:</label>
-      <input type="text" id="filename" name="filename" required placeholder="Enter file name (e.g., wallet_export.csv)" />
-      
-      <button type="submit">Get Wallet</button>
-    </form>
-    <div id="result"></div>
+  <h1>FluxExport</h1>
+  
+  <!-- File Inputs -->
+  <div>
+    <label for="address">Wallet Address:</label>
+    <input type="text" id="address" name="address" required placeholder="Enter Wallet Address">
   </div>
+  
+  <div>
+    <label for="csvFormat">CSV Format:</label>
+    <select id="csvFormat">
+      <option value="CoinTracker">CoinTracker</option>
+      <option value="CoinTrackerExport">CoinTracker Export</option>
+    </select>
+  </div>
+  
+  <div>
+    <label for="startDate">Start Date:</label>
+    <input type="text" id="startDate" name="startDate" placeholder="MM/DD/YYYY">
+  </div>
+  
+  <div>
+    <label for="endDate">End Date:</label>
+    <input type="text" id="endDate" name="endDate" placeholder="MM/DD/YYYY">
+  </div>
+
+  <!-- Status Message -->
+  <div id="statusMessage">
+    <p id="status">Processing Rows: 0</p>
+  </div>
+
+  <!-- Download Button -->
+  <button id="downloadBtn" disabled>Download CSV</button>
+  
+  <script src="script.js"></script>
 </body>
 </html>

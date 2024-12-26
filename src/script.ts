@@ -7,8 +7,66 @@ function validateFileName(fileName: string): boolean {
   
   return validFileNamePattern.test(fileName);
 }
+
+let cvsDownloadData:string = "";
+
+document.addEventListener('DOMContentLoaded', () => {
+    const downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
+    const statusMessage = document.getElementById('status') as HTMLParagraphElement;
   
-// Handle form submission
+    // Get elements for inputs
+    const addressInput = document.getElementById('address') as HTMLInputElement;
+    const csvFormatSelect = document.getElementById('csvFormat') as HTMLSelectElement;
+    const startDateInput = document.getElementById('startDate') as HTMLInputElement;
+    const endDateInput = document.getElementById('endDate') as HTMLInputElement;
+  
+    // Parse the date inputs
+    const startDate = startDateInput.value ? parseDateToEpoch(startDateInput.value) : null;
+    const endDate = endDateInput.value ? parseDateToEpoch(endDateInput.value) : null;
+  
+    // Set initial configurations
+    setAddress(addressInput.value);
+    setCsvFormat(CSVFormat[csvFormatSelect.value as keyof typeof CSVFormat]);
+  
+    // Call getwallet and enable download button on success
+    getwallet().then(({data, rows}) => {
+        // Save the download data
+        data.forEach(row => { cvsDownloadData = cvsDownloadData + row + '\n'; });
+      // Once getwallet is done, enable the download button
+      downloadBtn.disabled = false;
+  
+      // Update the status message when getwallet is complete
+      updateStatusMessage(0); // You might want to call this after actual processing logic
+    }).catch((error) => {
+      console.error('Error while fetching wallet:', error);
+    });
+  
+    // Handle the download click event
+    downloadBtn.addEventListener('click', () => {
+      // Call your function to download CSV here
+      downloadCSV();
+    });
+  });
+  
+  // Function to update the status message
+  function updateStatusMessage(rowsRead: number) {
+    const statusMessage = document.getElementById('status') as HTMLParagraphElement;
+    statusMessage.textContent = `Processing Rows: ${rowsRead}`;
+  }
+  
+// Example CSV Download function
+function downloadCSV() {
+    // Assume you have CSV data available from your wallet processing logic
+    const csvData = cvsDownloadData; // This should be the CSV data from scanWallet
+    const blob = new Blob([csvData], { type: 'text/csv' });
+    cvsDownloadData = "";
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'transactions.csv';
+    link.click();
+  }
+  
+  // Handle form submission
 document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
 
@@ -74,12 +132,3 @@ let csvContent: string = "";
   // Trigger CSV download
   downloadCSV(csvContent, fileName);
 });
-
-// Function to trigger CSV download
-function downloadCSV(csvContent: string, filename: string): void {
-  const blob = new Blob([csvContent], { type: 'text/csv' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  link.click();
-}

@@ -139,7 +139,6 @@ export function trimZeros(input: string): string {
 export async function getwallet(): Promise<{ data: string[], rows: number }> {
   console.log("Starting wallet operation...");
 
-
   if (single) {
     // Perform wallet operations here
     // Example: Decoding a transaction
