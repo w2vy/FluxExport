@@ -6,6 +6,8 @@ import {
   setAddress,
   setTestTxid,
   setCsvFormat,
+  setStartDate,
+  setEndDate,
   parseDateToEpoch,
   CSVFormat,
   getwallet,
@@ -25,19 +27,23 @@ async function main(): Promise<void> {
       description: "Set the wallet address",
     })
     .option("csvFormat", {
+      alias: ['csvFormat', 'csvformat'],
       choices: [CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport],
       description: "Set the CSV format",
       default: CSVFormat.CoinTracker,
     })
     .option("testTxid", {
+      alias: ['testTxid', 'testtxid'],
       type: "string",
       description: "Transaction ID for testing single mode",
     })
     .option("startDate", {
+      alias: ['startDate', 'startdate'],
       type: "string",
       description: "Start date in MM/DD/YYYY format",
     })
     .option("endDate", {
+      alias: ['endDate', 'enddate'],
       type: "string",
       description: "End date in MM/DD/YYYY format",
     })
@@ -53,19 +59,20 @@ async function main(): Promise<void> {
   let startEpoch: number | null = null;
   let endEpoch: number | null = null;
 
+  console.log(argv.startDate);
   if (argv.startDate) {
     startEpoch = parseDateToEpoch(argv.startDate, false); // First Second of the day
     console.log(`Start Date (epoch): ${startEpoch}`);
+    setStartDate(startEpoch);
   }
 
   if (argv.endDate) {
     endEpoch = parseDateToEpoch(argv.endDate, true); // Last Second of the day
     console.log(`End Date (epoch): ${endEpoch}`);
+    setEndDate(endEpoch);
   }
 
-  if (argv.testTxid) {
-    setTestTxid(argv.testTxid);
-  }
+  if (argv.testTxid) setTestTxid(argv.testTxid);
 
   console.log("Configurations:");
   console.log(`single: ${argv.single}`);

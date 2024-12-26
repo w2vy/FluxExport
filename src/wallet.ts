@@ -75,6 +75,8 @@ export let single: boolean = false;
 export let Address: string = "";
 export let csvFormat: CSVFormat = CSVFormat.CoinTracker;
 export let testTxid: string = "";
+export let startDate: number = 0;
+export let endDate: number = 0;
 
 // Setter functions
 export function setSingle(value: boolean): void {
@@ -93,14 +95,22 @@ export function setCsvFormat(value: CSVFormat): void {
   csvFormat = value;
 }
 
+export function setStartDate(value: number): void {
+  startDate = value;
+}
+
+export function setEndDate(value: number): void {
+  endDate = value;
+}
+
 // Utility to format date to epoch time
-export function parseDateToEpoch(dateStr: string, endDate: boolean=false): number {
+export function parseDateToEpoch(dateStr: string, endOfDay: boolean=false): number {
   const [month, day, year] = dateStr.split("/").map(Number);
   const date = new Date(year, month - 1, day);
   if (isNaN(date.getTime())) {
     throw new Error(`Invalid date format: ${dateStr}`);
   }
-  if (endDate) {
+  if (endOfDay) {
     date.setDate(date.getDate() + 1);
     return Math.floor((date.getTime()-1) / 1000); // Tomorrow - 1 Sec is Today 23:59:59
   }
@@ -141,6 +151,7 @@ export async function getwallet(): Promise<void> {
   } else {
     const url = "https://api.runonflux.io/explorer/transactions/" + Address;
     const responseData = await fetchWebPageData(url);
+    // A block range or time filter could be useful for very large (with age) wallets
   
     if (responseData) {
       scanWalletData(responseData, Address);
@@ -267,7 +278,12 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
     var display:boolean = true;
     var skip:boolean = false;
     var voutAllMe: boolean = true;
-    
+    const dateTime: number = txn.data.time;
+
+    if (startDate !== 0 && dateTime < startDate) return; // Skip txn, too early
+    if (endDate !== 0 && dateTime > endDate) return; // Skip txn, too late
+    // If transactions are guarenteed to in in block (time) order this could be optimized
+
     if (txn.data.vin !== undefined) {
       txn.data.vin.forEach(vin => {
         if (vin.address === undefined) mined = true;
@@ -317,8 +333,6 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
       console.log(`vout List`);console.log(voutList);
       console.log(`has vin ${hasVin} out ${hasVout} All Me ${voutAllMe} Gas ${gas_fee}`)
     }
-
-    const dateTime: number = txn.data.time;
 
     if (hasVin && hasVout && voutAllMe) { // Sent to self (same wallet)
       type = "SENT";
