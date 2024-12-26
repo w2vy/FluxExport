@@ -105,21 +105,7 @@ export function setEndDate(value: number): void {
 
 // Utility to format date and time to epoch time
 export function parseDateToEpoch(dateTimeStr: string): number {
-  // Split date and time components
-  const [datePart, timePart] = dateTimeStr.split(" ");
-  const [month, day, year] = datePart.split("/").map(Number);
-
-  // Default time to midnight if not provided
-  let hours = 0,
-    minutes = 0,
-    seconds = 0;
-
-  if (timePart) {
-    [hours, minutes, seconds] = timePart.split(":").map(Number);
-  }
-
-  // Create the date object
-  const date = new Date(year, month - 1, day, hours, minutes, seconds);
+  let date = new Date(dateTimeStr);
 
   // Check if the date is valid
   if (isNaN(date.getTime())) {
@@ -150,8 +136,9 @@ export function trimZeros(input: string): string {
   return input.replace(/\.?0+$/, "");
 }
 
-export async function getwallet(): Promise<void> {
+export async function getwallet(): Promise<{ data: string[], rows: number }> {
   console.log("Starting wallet operation...");
+
 
   if (single) {
     // Perform wallet operations here
@@ -167,12 +154,15 @@ export async function getwallet(): Promise<void> {
     // A block range or time filter could be useful for very large (with age) wallets
   
     if (responseData) {
-      scanWalletData(responseData, Address);
+      const { data, rows } = await scanWalletData(responseData, Address);
+      return { data, rows };
     } else {
       console.log("Failed to retrieve data.");
     }
   }
-  console.log("Wallet operation completed.");
+  const data: string[]= ["Failed to retrieve data."];
+  const rows:number = 0;
+  return {data, rows}
 }
 
 async function fetchWebPageData(url: string): Promise<string | null> {
@@ -205,7 +195,7 @@ function isValidTxid(txid: string): boolean {
 function send_csv_ct(
   dateTime: number, recv_qty: string | number, recv_coin: string, send_qty: any, send_coin: string, gas_fee: string | number,
   gas_coin: string, tag: string
-): void {
+): string {
   const date:string = formatTimestamp(dateTime, true);
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
   if (typeof send_qty === "number" && send_qty > 0) send_qty = trimZeros((send_qty/100000000).toFixed(8));
@@ -213,14 +203,14 @@ function send_csv_ct(
   const csvRow = [
     date, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, tag
   ].join(",");
-  console.log(csvRow);
+  return csvRow;
 }
 
 function send_csv_ctExport(
   dateTime: number, type: string, txid: string, recv_qty: string | number, recv_coin: string, recv_usd: number | string, recv_name: string, recv_adr: string,
   recv_comment: string, send_qty: any, send_coin: string, send_usd: any, send_name: string, send_adr: string, send_comment: string, gas_fee: any,
   gas_coin: string, gas_usd: any
-): void {
+): string {
   const date:string = formatTimestamp(dateTime, false);
   if (typeof recv_usd === "number" && recv_usd as number > 0 && recv_usd as number < 0.0001) recv_usd = 0;
   if (typeof send_usd === "number" && send_usd as number > 0 && send_usd as number < 0.0001) send_usd = 0;
@@ -232,10 +222,11 @@ function send_csv_ctExport(
     date, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
     send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd
   ].join(",");
-  console.log(csvRow);
+  return csvRow;
 }
 
-export async function decodeTransaction(i: number, txid: string, myAddress:string) {
+export async function decodeTransaction(i: number, txid: string, myAddress:string): Promise<string[] | null> {
+  let data: string[] | null = [];
   const url = 'https://api.runonflux.io/daemon/getrawtransaction?verbose=1&txid=' + txid;
   if (!isValidTxid(txid)) console.log(`decodeTransaction: bad txid len ${txid.length} ${txid}`);
   else {
@@ -243,13 +234,13 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
 
     if (!responseData) {
       console.log("Failed to retrieve data.");
-      return;
+      return null;
     }
     var txn = JSON.parse(responseData) as Txn;
     if (!txn || !txn.data) {
       console.log(responseData);
       console.error("Invalid Txn structure.");
-      return;
+      return null;
     }
 
     if (txn.status != "success") {
@@ -262,18 +253,18 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
 
       if (!responseData2) {
         console.log("Failed to retrieve data.");
-        return;
+        return null;
       }
       const txn2 = JSON.parse(responseData2) as Txn;
       if (!txn2 || !txn2.data) {
         console.log(responseData2);
         console.error("Invalid Txn structure.");
-        return;
+        return null;
       }
   
       if (txn.status != "success") {
         console.log(`****************************** GET FAILED ${txid} *******************************************************`)
-        return;
+        return null;
       }
       txn = txn2;
     }
@@ -293,8 +284,8 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
     var voutAllMe: boolean = true;
     const dateTime: number = txn.data.time;
 
-    if (startDate !== 0 && dateTime < startDate) return; // Skip txn, too early
-    if (endDate !== 0 && dateTime > endDate) return; // Skip txn, too late
+    if (startDate !== 0 && dateTime < startDate) return null; // Skip txn, too early
+    if (endDate !== 0 && dateTime > endDate) return null; // Skip txn, too late
     // If transactions are guarenteed to in in block (time) order this could be optimized
 
     if (txn.data.vin !== undefined) {
@@ -358,11 +349,11 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
       gas_usd = gas_fee*coin_value/100000000;
       if (gas_fee > 0) { // if qty and gas 0, nothing to see here
         if (csvFormat === CSVFormat.CoinTrackerExport) {
-          send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-            send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+          data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+            send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd));
         }
         if (csvFormat === CSVFormat.CoinTracker) {
-          send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "");
+          data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
         }
       }
     } else if (mined) {
@@ -374,11 +365,11 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
       gas_usd = 0;
       //console.log(`Mined ${date}`);
       if (csvFormat === CSVFormat.CoinTrackerExport) {
-        send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-          send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+        data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+          send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd));
       }
       if (csvFormat === CSVFormat.CoinTracker) {
-        send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "mining");
+        data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "mining"));
       }
     } else { // 
       if (Object.keys(vinsum).length == 1) {
@@ -399,11 +390,11 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
             gas_usd = (gas_fee as number) * coin_value/100000000;
     
             if (csvFormat === CSVFormat.CoinTrackerExport) {
-              send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-                send_qty, send_coin, send_usd, send_name, outAdr, send_comment, gas_fee, gas_coin, gas_usd);
+              data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+                send_qty, send_coin, send_usd, send_name, outAdr, send_comment, gas_fee, gas_coin, gas_usd));
             }
             if (csvFormat === CSVFormat.CoinTracker) {
-              send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "");
+              data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
             }
             gas_fee = 0;
           }
@@ -418,11 +409,11 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
             recv_comment = msg;
             gas_fee = ''; // No fee to  receive
             if (csvFormat === CSVFormat.CoinTrackerExport) {
-              send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-                send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd);
+              data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+                send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd));
             }
             if (csvFormat === CSVFormat.CoinTracker) {
-              send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "");
+              data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
             }
           }
         });
@@ -434,26 +425,31 @@ export async function decodeTransaction(i: number, txid: string, myAddress:strin
       }
     }
   }
+  return data;
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function scanWalletData(responseData: string, myAddress:string) {
+async function scanWalletData(responseData: string, myAddress:string): Promise<{ data: string[], rows: number }> {
   try {
     const txns = JSON.parse(responseData) as WalletResponse;
 
+    let data: string[] = [];
+    let rows: number = 0;
     if (!txns || !txns.data) {
       console.log(responseData);
       console.error("Invalid response structure.");
-      return;
+      data.push("Invalid response structure.");
+      return {data, rows};
     }
 
     //console.log(`Status: ${txns.status}`);
     //console.log(`There are ${txns.data.length} transactions.`);
     if (csvFormat === CSVFormat.CoinTracker) {
-      console.log("Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag");
+      data.push("Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag");
+      rows = rows + 1;
     }
 
     if (false) {
@@ -461,11 +457,18 @@ async function scanWalletData(responseData: string, myAddress:string) {
     } else {
       for (const [index, txn] of txns.data.entries()) {
         //console.log(`Transaction ${index}: TXID: ${txn.txid}`);
-        await decodeTransaction(index, txn.txid, myAddress);
+        let newrows = await decodeTransaction(index, txn.txid, myAddress);
+        if (newrows !== null) {
+          newrows.forEach(row => { data.push(row); rows = rows + 1;});
+        }
       }
     }
+    return {data, rows};
     //console.log("Done.");
   } catch (error) {
     console.error("Error parsing or processing wallet data:", error);
   }
+  const data:string[] = ["Error parsing or processing wallet data"];
+  const rows:number = 0;
+  return {data, rows};
 }

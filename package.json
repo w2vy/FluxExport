@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
-  "browser": "index.js",
+  "browser": "index.html",
   "scripts": {
     "build": "tsc",
-    "start": "live-server src",
+    "start": "live-server .",
     "test": "node dist/test.js"
   },
   "keywords": [],

@@ -1,56 +1,85 @@
-import { getRandomNumber, getRandomText } from './utility.js';
+import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat } from './wallet.js';
 
-// Function to generate random sample data
-function generateSampleData(inputString: string): { data: string[][], rows: number } {
-    const rows = getRandomNumber(10) + 5; // 5-15 rows
-    const cols = 3; // Fixed number of columns
-    const data: string[][] = [["Input", "Random Number", "Random Text"]];
-
-    for (let i = 0; i < rows; i++) {
-        const randomNum = getRandomNumber(1000);
-        const randomText = getRandomText();
-        data.push([inputString, randomNum.toString(), randomText]);
-    }
-    return { data, rows };
+  // Function to validate the file name
+function validateFileName(fileName: string): boolean {
+  // Regular expression to allow only letters, numbers, underscores, hyphens, and ensure it ends with .csv
+  const validFileNamePattern = /^[a-zA-Z0-9_-]+\.csv$/;
+  
+  return validFileNamePattern.test(fileName);
 }
+  
+// Handle form submission
+document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
 
-// Function to convert data array to CSV string
-function arrayToCsv(data: string[][]): string {
-    return data.map(row => row.join(",")).join("\n");
-}
+  const address = (document.getElementById('address') as HTMLInputElement).value;
+  const csvFormat = (document.getElementById('csvFormat') as HTMLSelectElement).value;
+  const startDateStr = (document.getElementById('startDate') as HTMLInputElement).value;
+  const endDateStr = (document.getElementById('endDate') as HTMLInputElement).value;
+  const fileNameInput = document.getElementById('filename') as HTMLInputElement;
+  const fileName = fileNameInput.value.trim();
 
-// Function to trigger CSV file download
-function downloadCsv(filename: string, content: string): void {
-    const blob = new Blob([content], { type: 'text/csv' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
+  console.log("do submit");
+  // Validate address
+  if (!address) {
+    alert('Address is required!');
+    return;
+  }
 
-// Event listener for button click
-document.getElementById("generateCsv")?.addEventListener("click", () => {
-    const inputString = (document.getElementById("inputString") as HTMLInputElement).value;
-    if (!inputString) {
-        alert("Please enter a string.");
-        return;
-    }
+  // Validate CSV format
+  if (![CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport].includes(csvFormat as CSVFormat)) {
+    alert('Invalid CSV Format');
+    return;
+  }
 
-    const { data, rows } = generateSampleData(inputString);
-    const csvContent = arrayToCsv(data);
+  // Set configuration
+  setAddress(address);
+  setCsvFormat(csvFormat as CSVFormat);
 
-    const summaryMessage = document.getElementById("summaryMessage");
-    const downloadButton = document.getElementById("downloadCsv");
+  let startEpoch: number | null = null;
+  let endEpoch: number | null = null;
 
-    if (summaryMessage && downloadButton) {
-        summaryMessage.textContent = `CSV file generated with ${rows} rows. Click below to download.`;
-        summaryMessage.style.display = "block";
-        downloadButton.style.display = "inline-block";
+  // Parse and validate start date
+  if (startDateStr) {
+    startEpoch = parseDateToEpoch(startDateStr);
+  } else {
+    startEpoch = 0;
+    return;
+  }
 
-        downloadButton.onclick = () => {
-            downloadCsv("sample_data.csv", csvContent);
-        };
-    }
+  // Parse and validate end date
+  if (endDateStr) {
+    endEpoch = parseDateToEpoch(endDateStr);
+  } else {
+    endEpoch = 0;
+    return;
+  }
+
+  // Validate the file name
+  if (!validateFileName(fileName)) {
+    alert('Invalid file name. Please ensure the file name ends with ".csv" and contains only letters, numbers, underscores, and hyphens.');
+    return;
+  }
+    
+  // Call getwallet to get the wallet data
+  const {data, rows} = await getwallet();
+  
+// Generate the CSV content
+let csvContent: string = "";
+
+  data.forEach((row) => {
+    csvContent += row + "\n";
+  });
+
+  // Trigger CSV download
+  downloadCSV(csvContent, fileName);
 });
+
+// Function to trigger CSV download
+function downloadCSV(csvContent: string, filename: string): void {
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
