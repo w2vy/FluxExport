@@ -61,13 +61,13 @@ async function main(): Promise<void> {
 
   console.log(argv.startDate);
   if (argv.startDate) {
-    startEpoch = parseDateToEpoch(argv.startDate, false); // First Second of the day
+    startEpoch = parseDateToEpoch(argv.startDate);
     console.log(`Start Date (epoch): ${startEpoch}`);
     setStartDate(startEpoch);
   }
 
   if (argv.endDate) {
-    endEpoch = parseDateToEpoch(argv.endDate, true); // Last Second of the day
+    endEpoch = parseDateToEpoch(argv.endDate);
     console.log(`End Date (epoch): ${endEpoch}`);
     setEndDate(endEpoch);
   }

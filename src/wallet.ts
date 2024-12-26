@@ -103,19 +103,32 @@ export function setEndDate(value: number): void {
   endDate = value;
 }
 
-// Utility to format date to epoch time
-export function parseDateToEpoch(dateStr: string, endOfDay: boolean=false): number {
-  const [month, day, year] = dateStr.split("/").map(Number);
-  const date = new Date(year, month - 1, day);
+// Utility to format date and time to epoch time
+export function parseDateToEpoch(dateTimeStr: string): number {
+  // Split date and time components
+  const [datePart, timePart] = dateTimeStr.split(" ");
+  const [month, day, year] = datePart.split("/").map(Number);
+
+  // Default time to midnight if not provided
+  let hours = 0,
+    minutes = 0,
+    seconds = 0;
+
+  if (timePart) {
+    [hours, minutes, seconds] = timePart.split(":").map(Number);
+  }
+
+  // Create the date object
+  const date = new Date(year, month - 1, day, hours, minutes, seconds);
+
+  // Check if the date is valid
   if (isNaN(date.getTime())) {
-    throw new Error(`Invalid date format: ${dateStr}`);
+    throw new Error(`Invalid date or time format: ${dateTimeStr}`);
   }
-  if (endOfDay) {
-    date.setDate(date.getDate() + 1);
-    return Math.floor((date.getTime()-1) / 1000); // Tomorrow - 1 Sec is Today 23:59:59
-  }
+
   return Math.floor(date.getTime() / 1000);
 }
+
 
 // Existing functions from wallet.ts
 export function formatTimestamp(epochTime: number, usa: boolean): string {
