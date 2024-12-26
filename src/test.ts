@@ -14,6 +14,19 @@ import {
   decodeTransaction,
 } from "./wallet.js";
 
+  // Function to update the status message
+  function updateStatusMessage(message: string) {
+    console.log(`${message}`);
+  }
+
+// Function to validate the file name
+function validateFileName(fileName: string): boolean {
+  // Regular expression to allow only letters, numbers, underscores, hyphens, and ensure it ends with .csv
+  const validFileNamePattern = /^[a-zA-Z0-9_-]+\.csv$/;
+  
+  return validFileNamePattern.test(fileName);
+}
+
 async function main(): Promise<void> {
   // Command-line argument parsing
   const argv = await yargs(hideBin(process.argv))
@@ -91,7 +104,11 @@ async function main(): Promise<void> {
       await decodeTransaction(0, argv.testTxid, argv.address || "");
     } else {
       console.log("Fetching wallet data...");
-      await getwallet();
+      // Call getwallet and enable download button on success
+      getwallet(updateStatusMessage).then(({data, rows}) => {
+          // Save the download data
+          data.forEach(row => { console.log(row); });
+      });
     }
   } catch (error) {
     const err = error as Error;

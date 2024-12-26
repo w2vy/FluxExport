@@ -1,13 +1,12 @@
 import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat } from './wallet.js';
 
   // Function to validate the file name
-function validateFileName(fileName: string): boolean {
-  // Regular expression to allow only letters, numbers, underscores, hyphens, and ensure it ends with .csv
-  const validFileNamePattern = /^[a-zA-Z0-9_-]+\.csv$/;
+  function validateFileName(fileName: string): boolean {
+    // Regular expression to allow only letters, numbers, underscores, hyphens, and ensure it ends with .csv
+    const validFileNamePattern = /^[a-zA-Z0-9_-]+\.csv$/;
+    return validFileNamePattern.test(fileName);
+  }
   
-  return validFileNamePattern.test(fileName);
-}
-
 let cvsDownloadData:string = "";
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -29,14 +28,14 @@ document.addEventListener('DOMContentLoaded', () => {
     setCsvFormat(CSVFormat[csvFormatSelect.value as keyof typeof CSVFormat]);
   
     // Call getwallet and enable download button on success
-    getwallet().then(({data, rows}) => {
+    getwallet(updateStatusMessage).then(({data, rows}) => {
         // Save the download data
         data.forEach(row => { cvsDownloadData = cvsDownloadData + row + '\n'; });
       // Once getwallet is done, enable the download button
       downloadBtn.disabled = false;
   
       // Update the status message when getwallet is complete
-      updateStatusMessage(0); // You might want to call this after actual processing logic
+      updateStatusMessage('Ready for download'); // You might want to call this after actual processing logic
     }).catch((error) => {
       console.error('Error while fetching wallet:', error);
     });
@@ -49,9 +48,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   
   // Function to update the status message
-  function updateStatusMessage(rowsRead: number) {
+  function updateStatusMessage(message: string) {
     const statusMessage = document.getElementById('status') as HTMLParagraphElement;
-    statusMessage.textContent = `Processing Rows: ${rowsRead}`;
+    statusMessage.textContent = message;
   }
   
 // Example CSV Download function
@@ -118,17 +117,4 @@ document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
     alert('Invalid file name. Please ensure the file name ends with ".csv" and contains only letters, numbers, underscores, and hyphens.');
     return;
   }
-    
-  // Call getwallet to get the wallet data
-  const {data, rows} = await getwallet();
-  
-// Generate the CSV content
-let csvContent: string = "";
-
-  data.forEach((row) => {
-    csvContent += row + "\n";
-  });
-
-  // Trigger CSV download
-  downloadCSV(csvContent, fileName);
 });

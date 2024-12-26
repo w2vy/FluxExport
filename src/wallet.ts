@@ -136,7 +136,7 @@ export function trimZeros(input: string): string {
   return input.replace(/\.?0+$/, "");
 }
 
-export async function getwallet(): Promise<{ data: string[], rows: number }> {
+export async function getwallet(updateStatus: (message: string) => void): Promise<{ data: string[], rows: number }> {
   console.log("Starting wallet operation...");
 
   if (single) {
@@ -152,8 +152,11 @@ export async function getwallet(): Promise<{ data: string[], rows: number }> {
     const responseData = await fetchWebPageData(url);
     // A block range or time filter could be useful for very large (with age) wallets
   
+    updateStatus("Scanning Wallet...");
     if (responseData) {
-      const { data, rows } = await scanWalletData(responseData, Address);
+      const { data, rows } = await scanWalletData(updateStatus, responseData, Address);
+      if (rows == 0 && data.length == 1) updateStatus(data[0]);
+      else updateStatus(`Wallet Scan complete, ${rows} transactions found`);
       return { data, rows };
     } else {
       console.log("Failed to retrieve data.");
@@ -431,7 +434,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function scanWalletData(responseData: string, myAddress:string): Promise<{ data: string[], rows: number }> {
+async function scanWalletData(updateStatus: (message: string) => void, responseData: string, myAddress:string): Promise<{ data: string[], rows: number }> {
   try {
     const txns = JSON.parse(responseData) as WalletResponse;
 
@@ -460,6 +463,7 @@ async function scanWalletData(responseData: string, myAddress:string): Promise<{
         if (newrows !== null) {
           newrows.forEach(row => { data.push(row); rows = rows + 1;});
         }
+        updateStatus(`Processed ${rows} transactions.`);
       }
     }
     return {data, rows};
