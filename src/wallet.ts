@@ -94,11 +94,15 @@ export function setCsvFormat(value: CSVFormat): void {
 }
 
 // Utility to format date to epoch time
-export function parseDateToEpoch(dateStr: string): number {
+export function parseDateToEpoch(dateStr: string, endDate: boolean=false): number {
   const [month, day, year] = dateStr.split("/").map(Number);
   const date = new Date(year, month - 1, day);
   if (isNaN(date.getTime())) {
     throw new Error(`Invalid date format: ${dateStr}`);
+  }
+  if (endDate) {
+    date.setDate(date.getDate() + 1);
+    return Math.floor((date.getTime()-1) / 1000); // Tomorrow - 1 Sec is Today 23:59:59
   }
   return Math.floor(date.getTime() / 1000);
 }
@@ -207,7 +211,7 @@ function send_csv_ctExport(
   console.log(csvRow);
 }
 
-async function decodeTransaction(i: number, txid: string, myAddress:string) {
+export async function decodeTransaction(i: number, txid: string, myAddress:string) {
   const url = 'https://api.runonflux.io/daemon/getrawtransaction?verbose=1&txid=' + txid;
   if (!isValidTxid(txid)) console.log(`decodeTransaction: bad txid len ${txid.length} ${txid}`);
   else {

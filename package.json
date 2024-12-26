@@ -2,9 +2,12 @@
   "name": "fluxexport",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
+  "browser": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "live-server src"
+    "start": "live-server src",
+    "test": "node dist/test.js"
   },
   "keywords": [],
   "author": "",
