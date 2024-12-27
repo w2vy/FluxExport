@@ -1,4 +1,4 @@
-import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat } from './wallet.js';
+import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate } from './wallet.js';
 
   // Function to validate the file name
   function validateFileName(fileName: string): boolean {
@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Parse and validate start date
         if (startDateStr) {
             startEpoch = parseDateToEpoch(startDateStr);
+            setStartDate(startEpoch);
         } else {
             startEpoch = 0;
         return;
@@ -70,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Parse and validate end date
         if (endDateStr) {
             endEpoch = parseDateToEpoch(endDateStr);
+            setEndDate(endEpoch);
         } else {
             endEpoch = 0;
         return;

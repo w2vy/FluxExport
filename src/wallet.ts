@@ -105,13 +105,21 @@ export function setEndDate(value: number): void {
 
 // Utility to format date and time to epoch time
 export function parseDateToEpoch(dateTimeStr: string): number {
-  let date = new Date(dateTimeStr);
-
+  // Split date and time components
+  const [datePart, timePart] = dateTimeStr.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  // Default time to midnight if not provided
+  let hours = 0,
+    minutes = 0;
+  if (timePart) {
+    [hours, minutes] = timePart.split(":").map(Number);
+  }
+  // Create the date object
+  const date = new Date(year, month - 1, day, hours, minutes);
   // Check if the date is valid
   if (isNaN(date.getTime())) {
     throw new Error(`Invalid date or time format: ${dateTimeStr}`);
   }
-
   return Math.floor(date.getTime() / 1000);
 }
 
@@ -154,6 +162,7 @@ export async function getwallet(updateStatus: (message: string) => void): Promis
   
     updateStatus("Scanning Wallet...");
     if (responseData) {
+      console.log(`getwallet: Start ${startDate} End ${endDate}`);
       const { data, rows } = await scanWalletData(updateStatus, responseData, Address);
       if (rows == 0 && data.length == 1) updateStatus(data[0]);
       else updateStatus(`Wallet Scan complete, ${rows} transactions found`);
