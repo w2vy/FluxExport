@@ -5,8 +5,8 @@
   "type": "module",
   "browser": "index.html",
   "scripts": {
-    "build": "tsc",
-    "start": "live-server .",
+    "build": "tsc && cp index.html dist/ && cp favicon.ico dist/ && cp src/styles.css dist/",
+    "start": "live-server dist",
     "test": "node dist/test.js"
   },
   "keywords": [],

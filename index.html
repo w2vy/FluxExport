@@ -4,43 +4,65 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FluxExport</title>
-  <link rel="stylesheet" href="src/styles.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Main Heading -->
   <h1>FluxExport</h1>
   
-  <!-- File Inputs -->
-  <div>
-    <label for="address">Wallet Address:</label>
-    <input type="text" id="address" name="address" required placeholder="Enter Wallet Address">
-  </div>
-  
-  <div>
-    <label for="csvFormat">CSV Format:</label>
-    <select id="csvFormat">
-      <option value="CoinTracker">CoinTracker</option>
-      <option value="CoinTrackerExport">CoinTracker Export</option>
-    </select>
-  </div>
-  
-  <div>
-    <label for="startDate">Start Date:</label>
-    <input type="text" id="startDate" name="startDate" placeholder="MM/DD/YYYY">
-  </div>
-  
-  <div>
-    <label for="endDate">End Date:</label>
-    <input type="text" id="endDate" name="endDate" placeholder="MM/DD/YYYY">
+  <!-- Form Section -->
+  <div class="container">
+    <h2>Flux Export Tool</h2>
+    <form id="walletForm">
+      <!-- Wallet Address Input -->
+      <label for="address">Wallet Address:</label>
+      <input 
+        type="text" 
+        id="address" 
+        name="address" 
+        placeholder="Enter Wallet Address" 
+        required 
+      />
+
+      <!-- CSV Format Selector -->
+      <label for="csvFormat">CSV Format:</label>
+      <select id="csvFormat" name="csvFormat" required>
+        <option value="CoinTracker">CoinTracker</option>
+        <option value="CoinTrackerExport">CoinTracker Export</option>
+      </select>
+
+      <!-- Start Date Input -->
+      <label for="startDate">Start Date:</label>
+      <input type="datetime-local" id="startDate" name="startDate" required />
+
+      <!-- End Date Input -->
+      <label for="endDate">End Date:</label>
+      <input type="datetime-local" id="endDate" name="endDate" required />
+
+      <!-- File Name Input -->
+      <label for="filename">File Name:</label>
+      <input 
+        type="text" 
+        id="filename" 
+        name="filename" 
+        required 
+        placeholder="Enter file name (e.g., wallet_export.csv)" 
+      />
+
+      <!-- Submit Button -->
+      <button type="submit">Get Wallet</button>
+    </form>
+
+    <!-- Status Message -->
+    <div id="statusMessage" aria-live="polite">
+      <p id="status">Waiting for updates...</p>
+    </div>
+
+    <!-- Download Button -->
+    <button id="downloadBtn" disabled aria-disabled="true">Download CSV</button>
   </div>
 
-  <!-- Status Message -->
-  <div id="statusMessage">
-    <p id="status">Waiting for updates...</p>
-  </div>
-
-  <!-- Download Button -->
-  <button id="downloadBtn" disabled>Download CSV</button>
-  
-  <script src="script.js"></script>
+  <!-- Script -->
+  <script type="module" src="script.js"></script>
 </body>
 </html>

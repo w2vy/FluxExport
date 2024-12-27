@@ -8,6 +8,7 @@ import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFo
   }
   
 let cvsDownloadData:string = "";
+let downloadFileName = "";
 
 document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
@@ -27,17 +28,72 @@ document.addEventListener('DOMContentLoaded', () => {
     setAddress(addressInput.value);
     setCsvFormat(CSVFormat[csvFormatSelect.value as keyof typeof CSVFormat]);
   
-    // Call getwallet and enable download button on success
-    getwallet(updateStatusMessage).then(({data, rows}) => {
-        // Save the download data
-        data.forEach(row => { cvsDownloadData = cvsDownloadData + row + '\n'; });
-      // Once getwallet is done, enable the download button
-      downloadBtn.disabled = false;
-  
-      // Update the status message when getwallet is complete
-      updateStatusMessage('Ready for download'); // You might want to call this after actual processing logic
-    }).catch((error) => {
-      console.error('Error while fetching wallet:', error);
+    // Handle form submission
+    document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
+        const address = (document.getElementById('address') as HTMLInputElement).value;
+        const csvFormat = (document.getElementById('csvFormat') as HTMLSelectElement).value;
+        const startDateStr = (document.getElementById('startDate') as HTMLInputElement).value;
+        const endDateStr = (document.getElementById('endDate') as HTMLInputElement).value;
+        const fileNameInput = document.getElementById('filename') as HTMLInputElement;
+        const fileName = fileNameInput.value.trim();
+    
+        console.log("do submit");
+        // Validate address
+        if (!address) {
+            alert('Address is required!');
+            return;
+        }
+    
+        // Validate CSV format
+        if (![CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport].includes(csvFormat as CSVFormat)) {
+            alert('Invalid CSV Format');
+            return;
+        }
+    
+        // Set configuration
+        setAddress(address);
+        setCsvFormat(csvFormat as CSVFormat);
+    
+        let startEpoch: number | null = null;
+        let endEpoch: number | null = null;
+    
+        // Parse and validate start date
+        if (startDateStr) {
+            startEpoch = parseDateToEpoch(startDateStr);
+        } else {
+            startEpoch = 0;
+        return;
+        }
+    
+        // Parse and validate end date
+        if (endDateStr) {
+            endEpoch = parseDateToEpoch(endDateStr);
+        } else {
+            endEpoch = 0;
+        return;
+        }
+    
+        // Validate the file name
+        if (!validateFileName(fileName)) {
+            alert('Invalid file name. Please ensure the file name ends with ".csv" and contains only letters, numbers, underscores, and hyphens.');
+            return;
+        }
+        downloadFileName = fileName;
+        // Call getwallet and enable download button on success
+        getwallet(updateStatusMessage).then(({data, rows}) => {
+            // Save the download data
+            data.forEach(row => { cvsDownloadData = cvsDownloadData + row + '\n'; });
+            // Once getwallet is done, enable the download button
+            downloadBtn.disabled = false;
+        
+            // Update the status message when getwallet is complete
+            updateStatusMessage('Ready for download'); // You might want to call this after actual processing logic
+        }).catch((error) => {
+            console.error('Error while fetching wallet:', error);
+        });
+        
     });
   
     // Handle the download click event
@@ -61,60 +117,7 @@ function downloadCSV() {
     cvsDownloadData = "";
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'transactions.csv';
+    link.download = downloadFileName;
     link.click();
   }
   
-  // Handle form submission
-document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-
-  const address = (document.getElementById('address') as HTMLInputElement).value;
-  const csvFormat = (document.getElementById('csvFormat') as HTMLSelectElement).value;
-  const startDateStr = (document.getElementById('startDate') as HTMLInputElement).value;
-  const endDateStr = (document.getElementById('endDate') as HTMLInputElement).value;
-  const fileNameInput = document.getElementById('filename') as HTMLInputElement;
-  const fileName = fileNameInput.value.trim();
-
-  console.log("do submit");
-  // Validate address
-  if (!address) {
-    alert('Address is required!');
-    return;
-  }
-
-  // Validate CSV format
-  if (![CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport].includes(csvFormat as CSVFormat)) {
-    alert('Invalid CSV Format');
-    return;
-  }
-
-  // Set configuration
-  setAddress(address);
-  setCsvFormat(csvFormat as CSVFormat);
-
-  let startEpoch: number | null = null;
-  let endEpoch: number | null = null;
-
-  // Parse and validate start date
-  if (startDateStr) {
-    startEpoch = parseDateToEpoch(startDateStr);
-  } else {
-    startEpoch = 0;
-    return;
-  }
-
-  // Parse and validate end date
-  if (endDateStr) {
-    endEpoch = parseDateToEpoch(endDateStr);
-  } else {
-    endEpoch = 0;
-    return;
-  }
-
-  // Validate the file name
-  if (!validateFileName(fileName)) {
-    alert('Invalid file name. Please ensure the file name ends with ".csv" and contains only letters, numbers, underscores, and hyphens.');
-    return;
-  }
-});
