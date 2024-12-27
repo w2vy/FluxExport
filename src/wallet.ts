@@ -463,20 +463,15 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       rows = rows + 1;
     }
 
-    if (false) {
-      await Promise.all(txns.data.map((txn, index) => decodeTransaction(index + 1, txn.txid, myAddress)));
-    } else {
-      for (const [index, txn] of txns.data.entries()) {
-        //console.log(`Transaction ${index}: TXID: ${txn.txid}`);
-        let newrows = await decodeTransaction(index, txn.txid, myAddress);
-        if (newrows !== null) {
-          newrows.forEach(row => { data.push(row); rows = rows + 1;});
-        }
-        updateStatus(`Processed ${rows} transactions.`);
+    for (const [index, txn] of txns.data.entries()) {
+      //console.log(`Transaction ${index}: TXID: ${txn.txid}`);
+      let newrows = await decodeTransaction(index, txn.txid, myAddress);
+      if (newrows !== null) {
+        newrows?.forEach(row => { data.push(row); rows = rows + 1;});
       }
+      updateStatus(`Processed ${rows} transactions.`);
     }
     return {data, rows};
-    //console.log("Done.");
   } catch (error) {
     console.error("Error parsing or processing wallet data:", error);
   }
