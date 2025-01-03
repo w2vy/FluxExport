@@ -152,7 +152,8 @@ export async function getwallet(updateStatus: (message: string) => void): Promis
     // Perform wallet operations here
     // Example: Decoding a transaction
     try {
-      await decodeTransaction(0, testTxid, Address);
+      let txn = await fetchTransaction(testTxid);
+      await decodeTransaction(txn, Address);
     } catch (error) {
       console.error("Error during wallet operation:", error);
     }
@@ -237,204 +238,184 @@ function send_csv_ctExport(
   return csvRow;
 }
 
-export async function decodeTransaction(i: number, txid: string, myAddress:string): Promise<string[] | null> {
-  let data: string[] | null = [];
+export async function fetchTransaction(txid: string): Promise<Txn> {
   const url = 'https://api.runonflux.io/daemon/getrawtransaction?verbose=1&txid=' + txid;
-  if (!isValidTxid(txid)) console.log(`decodeTransaction: bad txid len ${txid.length} ${txid}`);
+  if (!isValidTxid(txid)) console.log(`fetchTransaction: bad txid len ${txid.length} ${txid}`);
   else {
-    const responseData = await fetchWebPageData(url);
+    for (let i = 1; i <= 3; i++) {
+      const responseData = await fetchWebPageData(url);
 
-    if (!responseData) {
-      console.log("Failed to retrieve data.");
-      return null;
-    }
-    var txn = JSON.parse(responseData) as Txn;
-    if (!txn || !txn.data) {
-      console.log(responseData);
-      console.error("Invalid Txn structure.");
-      return null;
-    }
-
-    if (txn.status != "success") {
-      console.log("**************************************************************************************")
-      console.log(`status: ${txn.status} URL: ${url}`);
-      console.log(`Data size ${responseData.length} ${responseData}`);
-      console.log(txn);
-      sleep(1);
-      const responseData2 = await fetchWebPageData(url);
-
-      if (!responseData2) {
+      if (!responseData) {
         console.log("Failed to retrieve data.");
-        return null;
+        await sleep(500);
+        continue;
       }
-      const txn2 = JSON.parse(responseData2) as Txn;
-      if (!txn2 || !txn2.data) {
-        console.log(responseData2);
+      var txn = JSON.parse(responseData) as Txn;
+      if (!txn || !txn.data) {
+        console.log(responseData);
         console.error("Invalid Txn structure.");
-        return null;
+        await sleep(500);
+        continue;
       }
-  
-      if (txn.status != "success") {
-        console.log(`****************************** GET FAILED ${txid} *******************************************************`)
-        return null;
+      return txn;
+    }
+  }
+  throw new Error(`Unable to fetchTransaction for ${txid}`);
+}
+
+export async function decodeTransaction(txn: Txn, myAddress:string): Promise<string[] | null> {
+  let data: string[] | null = [];
+  var mined: boolean = false;
+  var hasVin: boolean = false;
+  var hasVout: boolean = false;
+  var voutValue: number = 0;
+  var vinValue: number = 0;
+  var voutTotal: number = 0;
+  var vinTotal: number = 0;
+  var vinAddress: string|undefined = undefined;
+  var voutAddress: string|undefined = undefined;
+  var vinsum: vsum = {};
+  var voutList: vsum = {};
+  var display:boolean = true;
+  var skip:boolean = false;
+  var voutAllMe: boolean = true;
+  const dateTime: number = txn.data.time;
+  const txid: string = txn.data.txid
+
+  if (txn.data.vin !== undefined) {
+    txn.data.vin.forEach(vin => {
+      if (vin.address === undefined) mined = true;
+      else {
+        if (vin.address === myAddress) hasVin = true;
+        if (vinsum[vin.address] === undefined) vinsum[vin.address] = vin.valueSat;
+        else vinsum[vin.address] = vinsum[vin.address] + vin.valueSat;
+        vinTotal = vinTotal + vin.valueSat;
       }
-      txn = txn2;
-    }
-    var mined: boolean = false;
-    var hasVin: boolean = false;
-    var hasVout: boolean = false;
-    var voutValue: number = 0;
-    var vinValue: number = 0;
-    var voutTotal: number = 0;
-    var vinTotal: number = 0;
-    var vinAddress: string|undefined = undefined;
-    var voutAddress: string|undefined = undefined;
-    var vinsum: vsum = {};
-    var voutList: vsum = {};
-    var display:boolean = true;
-    var skip:boolean = false;
-    var voutAllMe: boolean = true;
-    const dateTime: number = txn.data.time;
-
-    if (startDate !== 0 && dateTime < startDate) return null; // Skip txn, too early
-    if (endDate !== 0 && dateTime > endDate) return null; // Skip txn, too late
-    // If transactions are guarenteed to in in block (time) order this could be optimized
-
-    if (txn.data.vin !== undefined) {
-      txn.data.vin.forEach(vin => {
-        if (vin.address === undefined) mined = true;
-        else {
-          if (vin.address === myAddress) hasVin = true;
-          if (vinsum[vin.address] === undefined) vinsum[vin.address] = vin.valueSat;
-          else vinsum[vin.address] = vinsum[vin.address] + vin.valueSat;
-          vinTotal = vinTotal + vin.valueSat;
+    });
+  }
+  if (txn.data.vout !== undefined) {
+      txn.data.vout.forEach(vout => {
+        if (vout.scriptPubKey.addresses !== undefined) {
+          vout.scriptPubKey.addresses.forEach(outAdr => {
+            if (outAdr === myAddress) hasVout = true;
+            else voutAllMe = false;
+            if (voutList[outAdr] === undefined) voutList[outAdr] = vout.valueSat;
+            else voutList[outAdr] = voutList[outAdr] + vout.valueSat;
+            voutTotal = voutTotal + vout.valueSat;
+          });
         }
-      });
-    }
-    if (txn.data.vout !== undefined) {
-        txn.data.vout.forEach(vout => {
-          if (vout.scriptPubKey.addresses !== undefined) {
-            vout.scriptPubKey.addresses.forEach(outAdr => {
-              if (outAdr === myAddress) hasVout = true;
-              else voutAllMe = false;
-              if (voutList[outAdr] === undefined) voutList[outAdr] = vout.valueSat;
-              else voutList[outAdr] = voutList[outAdr] + vout.valueSat;
-              voutTotal = voutTotal + vout.valueSat;
-            });
-          }
-      });
-    }
-    //console.log(`Time is ${txn.data.time}`);
-    var coin_value:number = 0.75;
-    var msg: string = "";
-    var type: string = "";
-    var recv_qty : string | number = "";
-    var recv_coin: string = "";
-    var recv_usd : string | number = "";
-    var recv_name: string = "";
-    var recv_adr: string = "";
-    var recv_comment: string = "";
-    var send_qty : string | number = "";
-    var send_coin: string = "";
-    var send_usd: string | number = "";
-    var send_name: string = "";
-    var send_adr: string = "";
-    var send_comment: string = "";
-    var gas_fee: string | number = (vinTotal || 0) - (voutTotal || 0);
-    var gas_coin: string = "";
-    var gas_usd: number = 0;
+    });
+  }
+  //console.log(`Time is ${txn.data.time}`);
+  var coin_value:number = 0.75;
+  var msg: string = "";
+  var type: string = "";
+  var recv_qty : string | number = "";
+  var recv_coin: string = "";
+  var recv_usd : string | number = "";
+  var recv_name: string = "";
+  var recv_adr: string = "";
+  var recv_comment: string = "";
+  var send_qty : string | number = "";
+  var send_coin: string = "";
+  var send_usd: string | number = "";
+  var send_name: string = "";
+  var send_adr: string = "";
+  var send_comment: string = "";
+  var gas_fee: string | number = (vinTotal || 0) - (voutTotal || 0);
+  var gas_coin: string = "";
+  var gas_usd: number = 0;
 
-    if (single) {
-      console.log(`vin sum`);console.log(vinsum);
-      console.log(`vout List`);console.log(voutList);
-      console.log(`has vin ${hasVin} out ${hasVout} All Me ${voutAllMe} Gas ${gas_fee}`)
-    }
+  if (single) {
+    console.log(`vin sum`);console.log(vinsum);
+    console.log(`vout List`);console.log(voutList);
+    console.log(`has vin ${hasVin} out ${hasVout} All Me ${voutAllMe} Gas ${gas_fee}`)
+  }
 
-    if (hasVin && hasVout && voutAllMe) { // Sent to self (same wallet)
-      type = "SENT";
-      send_qty = 0;
-      send_coin = "FLUX";
-      send_usd = "0";
-      send_adr = myAddress;
-      recv_adr = myAddress;
-      gas_coin = "FLUX";
-      gas_usd = gas_fee*coin_value/100000000;
-      if (gas_fee > 0) { // if qty and gas 0, nothing to see here
-        if (csvFormat === CSVFormat.CoinTrackerExport) {
-          data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-            send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd));
-        }
-        if (csvFormat === CSVFormat.CoinTracker) {
-          data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
-        }
-      }
-    } else if (mined) {
-      type = "MINED";
-      recv_qty = voutList[myAddress];
-      recv_coin = "FLUX";
-      recv_usd = recv_qty*coin_value/100000000;
-      gas_fee = 0;
-      gas_usd = 0;
-      //console.log(`Mined ${date}`);
+  if (hasVin && hasVout && voutAllMe) { // Sent to self (same wallet)
+    type = "SENT";
+    send_qty = 0;
+    send_coin = "FLUX";
+    send_usd = "0";
+    send_adr = myAddress;
+    recv_adr = myAddress;
+    gas_coin = "FLUX";
+    gas_usd = gas_fee*coin_value/100000000;
+    if (gas_fee > 0) { // if qty and gas 0, nothing to see here
       if (csvFormat === CSVFormat.CoinTrackerExport) {
         data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
           send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd));
       }
       if (csvFormat === CSVFormat.CoinTracker) {
-        data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "mining"));
+        data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
       }
-    } else { // 
-      if (Object.keys(vinsum).length == 1) {
-        send_adr = Object.keys(vinsum)[0];
-      } else {
-        send_adr = "multiAddress send";
-        msg = `From Addresses: ${Object.keys(vinsum).join(", ")}`;
-      }
-      if (hasVin) {
-        type = "SENT";
-        Object.keys(voutList).forEach(outAdr => {
-          if (outAdr !== myAddress) {
-            send_qty = voutList[outAdr];
-            send_coin = "FLUX";
-            send_usd = send_qty * coin_value/100000000;
-            send_comment = msg;
-            gas_coin = "FLUX";
-            gas_usd = (gas_fee as number) * coin_value/100000000;
-    
-            if (csvFormat === CSVFormat.CoinTrackerExport) {
-              data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-                send_qty, send_coin, send_usd, send_name, outAdr, send_comment, gas_fee, gas_coin, gas_usd));
-            }
-            if (csvFormat === CSVFormat.CoinTracker) {
-              data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
-            }
-            gas_fee = 0;
+    }
+  } else if (mined) {
+    type = "MINED";
+    recv_qty = voutList[myAddress];
+    recv_coin = "FLUX";
+    recv_usd = recv_qty*coin_value/100000000;
+    gas_fee = 0;
+    gas_usd = 0;
+    //console.log(`Mined ${date}`);
+    if (csvFormat === CSVFormat.CoinTrackerExport) {
+      data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+        send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd));
+    }
+    if (csvFormat === CSVFormat.CoinTracker) {
+      data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, "mining"));
+    }
+  } else { // 
+    if (Object.keys(vinsum).length == 1) {
+      send_adr = Object.keys(vinsum)[0];
+    } else {
+      send_adr = "multiAddress send";
+      msg = `From Addresses: ${Object.keys(vinsum).join(", ")}`;
+    }
+    if (hasVin) {
+      type = "SENT";
+      Object.keys(voutList).forEach(outAdr => {
+        if (outAdr !== myAddress) {
+          send_qty = voutList[outAdr];
+          send_coin = "FLUX";
+          send_usd = send_qty * coin_value/100000000;
+          send_comment = msg;
+          gas_coin = "FLUX";
+          gas_usd = (gas_fee as number) * coin_value/100000000;
+  
+          if (csvFormat === CSVFormat.CoinTrackerExport) {
+            data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+              send_qty, send_coin, send_usd, send_name, outAdr, send_comment, gas_fee, gas_coin, gas_usd));
           }
-        });
-      } else if (hasVout) {
-        type = "RECEIVED";
-        Object.keys(voutList).forEach(outAdr => {
-          if (outAdr === myAddress) {
-            recv_qty = voutList[outAdr];
-            recv_coin = "FLUX";
-            recv_usd = recv_qty * coin_value/100000000;
-            recv_comment = msg;
-            gas_fee = ''; // No fee to  receive
-            if (csvFormat === CSVFormat.CoinTrackerExport) {
-              data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
-                send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd));
-            }
-            if (csvFormat === CSVFormat.CoinTracker) {
-              data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
-            }
+          if (csvFormat === CSVFormat.CoinTracker) {
+            data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
           }
-        });
-      } else {
-        console.log(`Ignored transaction ${txid} winsum voutlist note`);
-        console.log(txn.data.vin);
-        console.log(txn.data.vout);
-        console.log(`has in ${hasVin} out ${hasVout} Note ${msg}`);
-      }
+          gas_fee = 0;
+        }
+      });
+    } else if (hasVout) {
+      type = "RECEIVED";
+      Object.keys(voutList).forEach(outAdr => {
+        if (outAdr === myAddress) {
+          recv_qty = voutList[outAdr];
+          recv_coin = "FLUX";
+          recv_usd = recv_qty * coin_value/100000000;
+          recv_comment = msg;
+          gas_fee = ''; // No fee to  receive
+          if (csvFormat === CSVFormat.CoinTrackerExport) {
+            data.push(send_csv_ctExport(dateTime, type, txid, recv_qty, recv_coin, recv_usd, recv_name, recv_adr, recv_comment,
+              send_qty, send_coin, send_usd, send_name, send_adr, send_comment, gas_fee, gas_coin, gas_usd));
+          }
+          if (csvFormat === CSVFormat.CoinTracker) {
+            data.push(send_csv_ct(dateTime, recv_qty, recv_coin, send_qty, send_coin, gas_fee, gas_coin, ""));
+          }
+        }
+      });
+    } else {
+      console.log(`Ignored transaction ${txid} winsum voutlist note`);
+      console.log(txn.data.vin);
+      console.log(txn.data.vout);
+      console.log(`has in ${hasVin} out ${hasVout} Note ${msg}`);
     }
   }
   return data;
@@ -446,11 +427,11 @@ function sleep(ms: number): Promise<void> {
 
 async function scanWalletData(updateStatus: (message: string) => void, responseData: string, myAddress:string): Promise<{ data: string[], rows: number }> {
   try {
-    const txns = JSON.parse(responseData) as WalletResponse;
+    const TXNs = JSON.parse(responseData) as WalletResponse;
 
     let data: string[] = [];
     let rows: number = 0;
-    if (!txns || !txns.data) {
+    if (!TXNs || !TXNs.data) {
       console.log(responseData);
       console.error("Invalid response structure.");
       data.push("Invalid response structure.");
@@ -459,14 +440,62 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
 
     //console.log(`Status: ${txns.status}`);
     //console.log(`There are ${txns.data.length} transactions.`);
+    const txids = TXNs.data;
+    let txns: Txn[] = [];
+    let start: number = txids.length-1;
+    let finish: number = 0;
+
+    txns[start] = await fetchTransaction(txids[start].txid)
+    txns[finish] = await fetchTransaction(txids[finish].txid)
+    if (startDate != 0 && txids.length > 10) {
+      let done: boolean = false;
+      let nstart: number = start;
+      let nfinish: number = finish;
+      while (!done) {
+        if (nstart - nfinish < 5) done = true;
+        if (txns[nstart].data.time >= startDate) done = true; // Our Start is after the startDate
+        else if (txns[nfinish].data.time < startDate) done = true; // Our Finish is before startDate
+        else {
+          let next: number = Math.floor(nfinish + (nstart - nfinish)/2);
+          if (txns[next] == undefined) txns[next] = await fetchTransaction(txids[next].txid);
+          if (txns[next].data.time <= startDate) nstart = next;
+          else nfinish = next;
+        }
+      }
+      start = nstart;
+    }
+    
+    if (txns[start] == undefined) txns[start] = await fetchTransaction(txids[start].txid)
+    if (txns[finish] == undefined) txns[finish] = await fetchTransaction(txids[finish].txid)
+    if (endDate != 0 && txids.length > 10) {
+      let done: boolean = false;
+      let nstart: number = start;
+      let nfinish: number = finish;
+      while (!done) {
+        if (nstart - nfinish < 5) done = true;
+        if (txns[nfinish].data.time <= endDate) done = true; // Our Finish is after the endDate
+        else if (txns[nstart].data.time > endDate) done = true; // Our Start is before startDate
+        else {
+          let next: number = Math.floor(nfinish + (nstart - nfinish)/2);
+          if (txns[next] == undefined) txns[next] = await fetchTransaction(txids[next].txid);
+          if (txns[next].data.time <= endDate) nstart = next;
+          else nfinish = next;
+        }
+      }
+      finish = nfinish;
+    }
+    
     if (csvFormat === CSVFormat.CoinTracker) {
       data.push("Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag");
       rows = rows + 1;
     }
 
-    for (const [index, txn] of txns.data.entries()) {
-      //console.log(`Transaction ${index}: TXID: ${txn.txid}`);
-      let newrows = await decodeTransaction(index, txn.txid, myAddress);
+    for (let index = start; index >= finish; index--) {
+      var txn: Txn;
+      if (txns[index] == undefined) txn = await fetchTransaction(txids[index].txid);
+      else txn = txns[index];
+      if (txn.data.time < startDate || txn.data.time > endDate) continue;
+      let newrows = await decodeTransaction(txn, myAddress);
       if (newrows !== null) {
         newrows?.forEach(row => { data.push(row); rows = rows + 1;});
       }
