@@ -65,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setStartDate(startEpoch);
         } else {
             startEpoch = 0;
-        return;
         }
     
         // Parse and validate end date
@@ -74,7 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setEndDate(endEpoch);
         } else {
             endEpoch = 0;
-        return;
         }
     
         // Validate the file name
