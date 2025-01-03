@@ -438,8 +438,8 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       return {data, rows};
     }
 
-    //console.log(`Status: ${txns.status}`);
-    //console.log(`There are ${txns.data.length} transactions.`);
+    console.log(`Status: ${TXNs.status}`);
+    console.log(`There are ${TXNs.data.length} transactions.`);
     const txids = TXNs.data;
     let txns: Txn[] = [];
     let start: number = txids.length-1;
@@ -464,7 +464,7 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       }
       start = nstart;
     }
-    
+    console.log(`Start ${start}`);
     if (txns[start] == undefined) txns[start] = await fetchTransaction(txids[start].txid)
     if (txns[finish] == undefined) txns[finish] = await fetchTransaction(txids[finish].txid)
     if (endDate != 0 && txids.length > 10) {
@@ -484,7 +484,7 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       }
       finish = nfinish;
     }
-    
+    console.log(`End ${finish}`);
     if (csvFormat === CSVFormat.CoinTracker) {
       data.push("Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag");
       rows = rows + 1;
@@ -494,12 +494,14 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       var txn: Txn;
       if (txns[index] == undefined) txn = await fetchTransaction(txids[index].txid);
       else txn = txns[index];
-      if (txn.data.time < startDate || txn.data.time > endDate) continue;
+      console.log(`Process Transaction ${index}: ${txn.data.time} ${txids[index].txid}`)
+      if (startDate > 0 && txn.data.time < startDate) continue;
+      if (endDate > 0 && txn.data.time > endDate) continue;
       let newrows = await decodeTransaction(txn, myAddress);
       if (newrows !== null) {
         newrows?.forEach(row => { data.push(row); rows = rows + 1;});
       }
-      updateStatus(`Processed ${rows} transactions.`);
+      updateStatus(`Processed ${rows-1} transactions.`); // Don't count header row
     }
     return {data, rows};
   } catch (error) {

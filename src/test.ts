@@ -12,6 +12,7 @@ import {
   CSVFormat,
   getwallet,
   decodeTransaction,
+  fetchTransaction
 } from "./wallet.js";
 
   // Function to update the status message
@@ -53,12 +54,12 @@ async function main(): Promise<void> {
     .option("startDate", {
       alias: ['startDate', 'startdate'],
       type: "string",
-      description: "Start date in MM/DD/YYYY format",
+      description: "Start date in YYYY-MM-DD format",
     })
     .option("endDate", {
       alias: ['endDate', 'enddate'],
       type: "string",
-      description: "End date in MM/DD/YYYY format",
+      description: "End date in YYYY-MM-DD format",
     })
     .demandOption(["address"], "Please provide required arguments")
     .help()
@@ -101,7 +102,8 @@ async function main(): Promise<void> {
       if (!argv.testTxid) {
         throw new Error("testTxid is required in single mode.");
       }
-      await decodeTransaction(0, argv.testTxid, argv.address || "");
+      let txn = await fetchTransaction(argv.testTxid);
+      await decodeTransaction(txn, argv.address || "");
     } else {
       console.log("Fetching wallet data...");
       // Call getwallet and enable download button on success
