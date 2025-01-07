@@ -47,11 +47,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     
         // Validate CSV format
-        if (![CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport].includes(csvFormat as CSVFormat)) {
-            alert('Invalid CSV Format');
-            return;
+        const csvSupported = [CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport,
+          CSVFormat.CoinLedger, CSVFormat.Koinly];
+        if (!csvSupported.includes(csvFormat as CSVFormat)) {
+          alert('Invalid CSV Format');
+          return;
         }
-    
+
         // Set configuration
         setAddress(address);
         setCsvFormat(csvFormat as CSVFormat);
