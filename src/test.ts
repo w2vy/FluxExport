@@ -42,9 +42,9 @@ async function main(): Promise<void> {
     })
     .option("csvFormat", {
       alias: ['csvFormat', 'csvformat'],
-      choices: [CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport],
+      choices: [CSVFormat.CoinTracker, CSVFormat.CoinLedger, CSVFormat.Koinly],
       description: "Set the CSV format",
-      default: CSVFormat.CoinTracker,
+      default: CSVFormat.CoinLedger,
     })
     .option("txid", {
       type: "string",
@@ -102,12 +102,14 @@ async function main(): Promise<void> {
         throw new Error("test Txid is required in single mode.");
       }
       let txn = await fetchTransaction(argv.txid);
-      await decodeTransaction(txn, argv.address || "");
+      let data = await decodeTransaction(txn, argv.address);
+      if (data) data.forEach(row => { console.log(row); });
     } else {
       console.log("Fetching wallet data...");
       // Call getwallet and enable download button on success
       getwallet(updateStatusMessage).then(({data, rows}) => {
           // Save the download data
+          console.log(`Found ${rows} rows`);
           data.forEach(row => { console.log(row); });
       });
     }

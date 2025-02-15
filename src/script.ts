@@ -47,8 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     
         // Validate CSV format
-        const csvSupported = [CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport,
-          CSVFormat.CoinLedger, CSVFormat.Koinly];
+        const csvSupported = [CSVFormat.CoinTracker, CSVFormat.CoinLedger, CSVFormat.Koinly];
         if (!csvSupported.includes(csvFormat as CSVFormat)) {
           alert('Invalid CSV Format');
           return;
