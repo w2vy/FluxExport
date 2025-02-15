@@ -176,6 +176,21 @@ export function formatTimestamp(epochTime: number, usa: boolean): string {
   return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
+export function formatTimestampKO(epochTime: number): string {
+  const date = new Date(epochTime * 1000);
+  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear();
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  // Combine components into the desired format
+
+  return `${year}-${month}-${day} ${hours}:${minutes} UTC`;
+}
+
 export function trimZeros(input: string): string {
   return input.replace(/\.?0+$/, "");
 }
@@ -277,9 +292,11 @@ function send_csv_ko(
   dateTime: number, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string, send_comment: string, gas_fee: string | number,
   gas_coin: string, tag: string, txid: string, hash: string
 ): string {
-  const date:string = formatTimestamp(dateTime, true); // UTC format needed
+  const date:string = formatTimestampKO(dateTime); // UTC format needed
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
+  else recv_coin = "";
   if (typeof send_qty === "number" && send_qty > 0) send_qty = trimZeros((send_qty/100000000).toFixed(8));
+  else send_coin = "";
   if (typeof gas_fee === "number" && gas_fee > 0) gas_fee = trimZeros((gas_fee/100000000).toFixed(8));
   let comment = "";
   if (recv_comment.length > 0) {
