@@ -42,12 +42,11 @@ async function main(): Promise<void> {
     })
     .option("csvFormat", {
       alias: ['csvFormat', 'csvformat'],
-      choices: [CSVFormat.CoinTracker, CSVFormat.CoinTrackerExport],
+      choices: [CSVFormat.CoinTracker, CSVFormat.CoinLedger, CSVFormat.Koinly],
       description: "Set the CSV format",
-      default: CSVFormat.CoinTracker,
+      default: CSVFormat.CoinLedger,
     })
-    .option("testTxid", {
-      alias: ['testTxid', 'testtxid'],
+    .option("txid", {
       type: "string",
       description: "Transaction ID for testing single mode",
     })
@@ -86,7 +85,7 @@ async function main(): Promise<void> {
     setEndDate(endEpoch);
   }
 
-  if (argv.testTxid) setTestTxid(argv.testTxid);
+  if (argv.txid) setTestTxid(argv.txid);
 
   console.log("Configurations:");
   console.log(`single: ${argv.single}`);
@@ -94,21 +93,23 @@ async function main(): Promise<void> {
   console.log(`CSV Format: ${argv.csvFormat}`);
   console.log(`Start Epoch: ${startEpoch}`);
   console.log(`End Epoch: ${endEpoch}`);
-  console.log(`Test Txid: ${argv.testTxid || "None"}`);
+  console.log(`Test Txid: ${argv.txid || "None"}`);
 
   try {
     if (argv.single) {
       console.log("Single mode enabled. Decoding a single transaction...");
-      if (!argv.testTxid) {
-        throw new Error("testTxid is required in single mode.");
+      if (!argv.txid) {
+        throw new Error("test Txid is required in single mode.");
       }
-      let txn = await fetchTransaction(argv.testTxid);
-      await decodeTransaction(txn, argv.address || "");
+      let txn = await fetchTransaction(argv.txid);
+      let data = await decodeTransaction(txn, argv.address);
+      if (data) data.forEach(row => { console.log(row); });
     } else {
       console.log("Fetching wallet data...");
       // Call getwallet and enable download button on success
       getwallet(updateStatusMessage).then(({data, rows}) => {
           // Save the download data
+          console.log(`Found ${rows} rows`);
           data.forEach(row => { console.log(row); });
       });
     }
