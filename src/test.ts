@@ -106,12 +106,10 @@ async function main(): Promise<void> {
       if (data) data.forEach(row => { console.log(row); });
     } else {
       console.log("Fetching wallet data...");
-      // Call getwallet and enable download button on success
-      getwallet(updateStatusMessage).then(({data, rows}) => {
-          // Save the download data
-          console.log(`Found ${rows} rows`);
-          data.forEach(row => { console.log(row); });
-      });
+      // Call getwallet and log the resulting rows
+      const { data, rows } = await getwallet(updateStatusMessage);
+      console.log(`Found ${rows} rows`);
+      data.forEach(row => { console.log(row); });
     }
   } catch (error) {
     const err = error as Error;
