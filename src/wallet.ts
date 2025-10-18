@@ -85,6 +85,32 @@ let csvSent: string = "SENT";
 let csvReceived: string = "RECEIVED";
 let csvMined: string = "MINED";
 
+// Well known Flux Wallets
+
+const KnownWallets: { [key: string]: string } = {
+  t3c51GjrkUg7pUiS8bzNdTnW2hD25egWUih: 'Flux Foundation Locked',
+  t3ZQQsd8hJNw6UQKYLwfofdL3ntPmgkwofH: 'Flux Foundation Locked',
+  t1XWTigDqS5Dy9McwQc752ShtZV1ffTMJB3: 'Flux Foundation',
+  t1eabPBaLCqNgttQMnAoohPaQM6u2vFwTNJ: 'Flux Foundation',
+  t1abAp9oZenibGLFuZKyUjmL6FiATTaCYaj: 'Flux Swap Pool Hot',
+  t1cjcLaDHkNcuXh6uoyNL7u1jx7GxvzfYAN: 'Flux Swap Pool Cold',
+  t1gZgxSEr9RcMBcUyHvkN1U2bJsz3CEV2Ve: 'Flux Foundation Mining',
+  t3XjYMBvwxnXVv9jqg4CgokZ3f7kAoXPQL8: 'Flux Foundation Locked',
+  t3PMbbA5YBMrjSD3dD16SSdXKuKovwmj6tS: 'Flux Listings Locked',
+  t3ThbWogDoAjGuS6DEnmN1GWJBRbVjSUK4T: 'Flux Swap Pool Locked',
+  t3heoBJT9gn9mne7Q5aynajJo7tReyDv2NV: 'Flux Swap Pool Locked',
+  t1Yum7okNzR5kW84dfgwqB23yy1BCcpHFPq: 'Flux Coinbase Pool Hot',
+  t1Zj9vUsAMoG4M9LSy5ahDzZUmokKGXqwcT: 'Flux Coinbase Pool Hot',
+  t1ZLpyVr6hs3vAH7qKujJRpu17G3VdxAkrY: 'Flux Swap Pool Cold',
+  t1SHUuYiE8UT7Hnu9Qr3QcGu3W4L55W98pU: 'Flux Swap Pool Hot',
+  t3NryfAQLGeFs9jEoeqsxmBN2QLRaRKFLUX: 'Flux App Deployment'
+};
+
+function getWalletName(adr: string) : string {
+  if (adr in KnownWallets) return KnownWallets[adr];
+  return adr;
+}
+
 // Setter functions
 export function setSingle(value: boolean): void {
   single = value;
@@ -103,9 +129,9 @@ export function setCsvFormat(value: CSVFormat): void {
   if (csvFormat === CSVFormat.CoinTracker) {
     csvRecord = send_csv_ct;
     csvHeader = "Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag";
-    csvSent = "SENT";
-    csvReceived = "RECEIVED";
-    csvMined = "MINED";
+    csvSent = "";
+    csvReceived = "payment";
+    csvMined = "mining";
   }
   if (csvFormat === CSVFormat.CoinLedger) {
     csvRecord = send_csv_cl;
@@ -429,8 +455,11 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
       send_adr = Object.keys(vinsum)[0];
     } else {
       send_adr = "multiAddress send";
-      msg = `From Addresses: ${Object.keys(vinsum).join(", ")}`;
     }
+    msg = "Address: ";
+    Object.keys(vinsum).forEach(inAdr => {
+      msg = msg + getWalletName(inAdr) + " ";
+    });
     if (single) console.log(`Sender ${send_adr} ${msg}`);
     if (hasVin) {
       if (single) {
@@ -443,7 +472,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           send_qty = voutList[outAdr];
           send_coin = "FLUX";
           send_usd = send_qty * coin_value/100000000;
-          send_comment = msg;
+          send_comment = `Address: ${getWalletName(outAdr)}`;
           gas_coin = "FLUX";
           gas_usd = (gas_fee as number) * coin_value/100000000;
   
