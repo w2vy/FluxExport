@@ -14,11 +14,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "live-server": "^1.2.0",
     "typescript": "^5.7.2",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
+    "live-server": "^1.2.0",
     "@types/node": "^22.10.2",
     "@types/yargs": "^17.0.33"
   }
