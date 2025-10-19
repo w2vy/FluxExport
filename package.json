@@ -1,11 +1,12 @@
 {
   "name": "fluxexport",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.js",
   "type": "module",
   "browser": "index.html",
   "scripts": {
     "build": "tsc && cp index.html dist/ && cp favicon.ico dist/ && cp src/styles.css dist/",
+    "postbuild": "node scripts/inject-version.js",
     "start": "live-server dist",
     "test": "node dist/test.js"
   },
