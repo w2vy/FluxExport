@@ -1,11 +1,12 @@
 {
   "name": "fluxexport",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.js",
   "type": "module",
   "browser": "index.html",
   "scripts": {
     "build": "tsc && cp index.html dist/ && cp favicon.ico dist/ && cp src/styles.css dist/",
+    "postbuild": "node scripts/inject-version.js",
     "start": "live-server dist",
     "test": "node dist/test.js"
   },
@@ -14,11 +15,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "live-server": "^1.2.0",
     "typescript": "^5.7.2",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
+    "live-server": "^1.2.0",
     "@types/node": "^22.10.2",
     "@types/yargs": "^17.0.33"
   }

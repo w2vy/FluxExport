@@ -526,6 +526,13 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       return {data, rows};
     }
 
+    if (TXNs.data.length === 0) {
+      data.push(csvHeader);
+      rows = rows + 1;
+      updateStatus("Wallet Scan complete, 0 transactions found");
+      return { data, rows };
+    }
+
     console.log(`Status: ${TXNs.status}`);
     console.log(`There are ${TXNs.data.length} transactions.`);
     const txids = TXNs.data;

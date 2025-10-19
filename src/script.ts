@@ -66,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setStartDate(startEpoch);
         } else {
             startEpoch = 0;
+            setStartDate(0);
         }
     
         // Parse and validate end date
@@ -74,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setEndDate(endEpoch);
         } else {
             endEpoch = 0;
+            setEndDate(0);
         }
     
         // Validate the file name
@@ -82,15 +84,21 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         downloadFileName = fileName;
+        cvsDownloadData = "";
+        downloadBtn.disabled = true;
         // Call getwallet and enable download button on success
         getwallet(updateStatusMessage).then(({data, rows}) => {
             // Save the download data
             data.forEach(row => { cvsDownloadData = cvsDownloadData + row + '\n'; });
-            // Once getwallet is done, enable the download button
-            downloadBtn.disabled = false;
-        
-            // Update the status message when getwallet is complete
-            updateStatusMessage('Ready for download'); // You might want to call this after actual processing logic
+
+            if (rows > 1) {
+                // Once getwallet is done, enable the download button
+                downloadBtn.disabled = false;
+                updateStatusMessage('Ready for download');
+            } else {
+                downloadBtn.disabled = true;
+                updateStatusMessage('No transactions found for this address or date range.');
+            }
         }).catch((error) => {
             console.error('Error while fetching wallet:', error);
         });
