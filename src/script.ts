@@ -13,12 +13,40 @@ let downloadFileName = "";
 document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
     const statusMessage = document.getElementById('status') as HTMLParagraphElement;
+    const downloadNotice = document.getElementById('downloadNotice') as HTMLParagraphElement;
   
     // Get elements for inputs
     const addressInput = document.getElementById('address') as HTMLInputElement;
     const csvFormatSelect = document.getElementById('csvFormat') as HTMLSelectElement;
     const startDateInput = document.getElementById('startDate') as HTMLInputElement;
     const endDateInput = document.getElementById('endDate') as HTMLInputElement;
+    const watchedInputs = [addressInput, csvFormatSelect, startDateInput, endDateInput];
+
+    const disableDownloadBtn = (message?: string) => {
+      downloadBtn.disabled = true;
+      downloadBtn.setAttribute('aria-disabled', 'true');
+      if (downloadNotice) {
+        downloadNotice.textContent = message ?? 'Download unavailable until you refresh with the latest inputs.';
+      }
+    };
+
+    const enableDownloadBtn = () => {
+      downloadBtn.disabled = false;
+      downloadBtn.setAttribute('aria-disabled', 'false');
+      if (downloadNotice) {
+        downloadNotice.textContent = 'Download ready. Click the button to save your CSV.';
+      }
+    };
+
+    const handleInputChange = () => {
+      disableDownloadBtn('Inputs changed—run "Get Wallet" again to enable downloads.');
+      updateStatusMessage('Inputs changed. Run "Get Wallet" to refresh.');
+    };
+
+    watchedInputs.forEach((input) => {
+      const eventType = input instanceof HTMLSelectElement ? 'change' : 'input';
+      input.addEventListener(eventType, handleInputChange);
+    });
   
     // Parse the date inputs
     const startDate = startDateInput.value ? parseDateToEpoch(startDateInput.value) : null;
@@ -85,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         downloadFileName = fileName;
         cvsDownloadData = "";
-        downloadBtn.disabled = true;
+        disableDownloadBtn();
         // Call getwallet and enable download button on success
         getwallet(updateStatusMessage).then(({data, rows}) => {
             // Save the download data
@@ -93,10 +121,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (rows > 1) {
                 // Once getwallet is done, enable the download button
-                downloadBtn.disabled = false;
+                enableDownloadBtn();
                 updateStatusMessage('Ready for download');
             } else {
-                downloadBtn.disabled = true;
+                disableDownloadBtn('No transactions available for the selected filters.');
                 updateStatusMessage('No transactions found for this address or date range.');
             }
         }).catch((error) => {

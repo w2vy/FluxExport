@@ -1,3 +1,27 @@
+
+
+
+/*
+
+Links to support documents on the CSV formats
+
+CoinTracker.io
+https://support.cointracker.io/hc/en-us/articles/4413071299729-Convert-your-transaction-history-to-CoinTracker-CSV
+https://support.cointracker.io/hc/en-us/articles/4413049710225-Transaction-category-definitions
+
+KOinly.io
+https://support.koinly.io/en/articles/9489976-how-to-create-a-custom-csv-file-with-your-data
+https://support.koinly.io/en/articles/9490023-what-are-tags
+https://support.koinly.io/en/articles/9490024-how-koinly-handles-transfers-between-your-own-wallets
+
+CoinLedger.io
+
+https://help.coinledger.io/en/articles/6028758-universal-manual-import-template-guide#h_0aa95c28d0
+
+I would like to add an option to the user to group the transactions by day, week, month or single transactions. 
+*/
+
+
 interface Txid {
   txid: string;
 }
