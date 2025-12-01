@@ -88,6 +88,11 @@ interface vsum {
   [key: string]: number;
 }
 
+interface FluxPricePoint {
+  timestamp: number;
+  price: number;
+}
+
 // wallet.ts
 
 export enum CSVFormat {
@@ -133,6 +138,104 @@ const KnownWallets: { [key: string]: string } = {
 function getWalletName(adr: string) : string {
   if (adr in KnownWallets) return KnownWallets[adr];
   return adr;
+}
+
+const HOUR_IN_SECONDS = 60 * 60;
+let cachedFluxPrices: FluxPricePoint[] | null = null;
+let loadingFluxPrices: Promise<FluxPricePoint[] | null> | null = null;
+
+function isFluxPricePoint(entry: unknown): entry is FluxPricePoint {
+  return typeof entry === "object" &&
+    entry !== null &&
+    typeof (entry as FluxPricePoint).timestamp === "number" &&
+    typeof (entry as FluxPricePoint).price === "number";
+}
+
+function cacheFluxPricePoint(timestamp: number, price: number): void {
+  if (!Number.isFinite(price) || price === 0) return;
+  if (!cachedFluxPrices) cachedFluxPrices = [];
+  let low = 0;
+  let high = cachedFluxPrices.length - 1;
+  let insertIdx = cachedFluxPrices.length;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const midTimestamp = cachedFluxPrices[mid].timestamp;
+    if (midTimestamp === timestamp) {
+      cachedFluxPrices[mid] = { timestamp, price };
+      return;
+    }
+    if (midTimestamp < timestamp) {
+      low = mid + 1;
+    } else {
+      insertIdx = mid;
+      high = mid - 1;
+    }
+  }
+  cachedFluxPrices.splice(insertIdx, 0, { timestamp, price });
+}
+
+async function loadFluxPrices(): Promise<FluxPricePoint[] | null> {
+  if (cachedFluxPrices) return cachedFluxPrices;
+  if (loadingFluxPrices) return loadingFluxPrices;
+
+  loadingFluxPrices = (async () => {
+    try {
+      // wallet.js sits next to flux.json in dist/, so a local relative URL works when served.
+      const fluxUrl = new URL('./flux.json', import.meta.url);
+      const response = await fetch(fluxUrl);
+      if (!response.ok) {
+        console.error(`Failed to load flux.json (${fluxUrl}): ${response.status} ${response.statusText}`);
+        return null;
+      }
+      const data = await response.json();
+      const parsed: FluxPricePoint[] = Array.isArray(data?.prices) ? data.prices.filter(isFluxPricePoint) : [];
+      cachedFluxPrices = parsed.sort((a, b) => a.timestamp - b.timestamp);
+      return cachedFluxPrices;
+    } catch (error) {
+      console.error('Error loading flux.json', error);
+      return null;
+    } finally {
+      loadingFluxPrices = null;
+    }
+  })();
+
+  return loadingFluxPrices;
+}
+
+async function liveUpdates(dateTime: number): Promise<number | null> {
+  console.warn(`liveUpdates stub called for ${dateTime}; live price fetch not implemented yet.`);
+  return null;
+}
+
+export async function getPrice(dateTime: number): Promise<number | null> {
+  const prices = await loadFluxPrices();
+  const pricePoints = prices ?? [];
+  if (!prices && cachedFluxPrices === null) {
+    cachedFluxPrices = pricePoints;
+  }
+  if (pricePoints.length > 0) {
+    let low = 0;
+    let high = pricePoints.length - 1;
+    let idx = -1;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (pricePoints[mid].timestamp <= dateTime) {
+        idx = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    if (idx !== -1) {
+      const candidate = pricePoints[idx];
+      const next = pricePoints[idx + 1];
+      const windowEnd = next ? next.timestamp : candidate.timestamp + HOUR_IN_SECONDS;
+      if (dateTime < windowEnd) return candidate.price;
+    }
+  }
+  const livePrice = await liveUpdates(dateTime);
+  if (livePrice && livePrice !== 0) cacheFluxPricePoint(dateTime, livePrice);
+  return livePrice;
 }
 
 // Setter functions
@@ -290,7 +393,7 @@ function isValidTxid(txid: string): boolean {
 
 function send_csv_ct(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any,
-  send_coin: string, send_comment: string, gas_fee: string | number,  gas_coin: string, txid: string, hash: string
+  send_coin: string, send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
 ): string {
   const date:string = formatTimestamp(dateTime, true);
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
@@ -304,7 +407,7 @@ function send_csv_ct(
 
 function send_csv_cl(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string,
-  send_comment: string, gas_fee: string | number, gas_coin: string, txid: string, hash: string
+  send_comment: string, gas_fee: string | number, gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
 ): string {
   const date:string = formatTimestamp(dateTime, true);
   if (tag == csvSent) {
@@ -334,7 +437,7 @@ function send_csv_cl(
 
 function send_csv_ko(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string,
-  send_comment: string, gas_fee: string | number,  gas_coin: string, txid: string, hash: string
+  send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
 ): string {
   const date:string = formatTimestampKO(dateTime); // UTC format needed
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
@@ -348,7 +451,7 @@ function send_csv_ko(
     if (send_comment.length > 0) comment = comment + ", " + send_comment;
   } else comment = send_comment;
   const csvRow = [
-    date, send_qty, send_coin, recv_qty, recv_coin, gas_fee, gas_coin, "", "", tag, comment, hash
+    date, send_qty, send_coin, recv_qty, recv_coin, gas_fee, gas_coin, net_usd, currency, tag, comment, hash
   ].join(",");
   return csvRow;
 }
@@ -395,6 +498,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
   var skip:boolean = false;
   var voutAllMe: boolean = true;
   const dateTime: number = txn.data.time;
+  var coin_value: number;
   const txid: string = txn.data.txid
   const hash: string = txn.data.blockhash;
 
@@ -422,8 +526,8 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         }
     });
   }
-  //console.log(`Time is ${txn.data.time}`);
-  var coin_value:number = 0.75;
+  coin_value = (await getPrice(dateTime)) ?? 0.75;
+  console.log(`Time is ${dateTime} price ${coin_value}`);
   var msg: string = "";
   var type: string = "";
   var recv_qty : string | number = "";
@@ -454,14 +558,15 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     type = csvSent;
     send_qty = 0;
     send_coin = "FLUX";
-    send_usd = "0";
+    send_usd = 0;
     send_adr = myAddress;
     recv_adr = myAddress;
     gas_coin = "FLUX";
     gas_usd = gas_fee*coin_value/100000000;
+    console.log(`usd gas ${gas_usd}`);
     if (gas_fee > 0) { // if qty and gas 0, nothing to see here
       data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-        send_qty, send_coin, send_comment, gas_fee, gas_coin, txid, hash));
+        send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
     }
   } else if (mined) {
     if (single) console.log("Mined");
@@ -469,11 +574,12 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     recv_qty = voutList[myAddress];
     recv_coin = "FLUX";
     recv_usd = recv_qty*coin_value/100000000;
+    console.log(`recv_usd ${recv_usd}`);
     gas_fee = 0;
     gas_usd = 0;
     //console.log(`Mined ${date}`);
     data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-      send_qty, send_coin, send_comment, gas_fee, gas_coin, txid, hash));
+      send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
   } else { // 
     if (Object.keys(vinsum).length == 1) {
       send_adr = Object.keys(vinsum)[0];
@@ -499,9 +605,9 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           send_comment = `Address: ${getWalletName(outAdr)}`;
           gas_coin = "FLUX";
           gas_usd = (gas_fee as number) * coin_value/100000000;
-  
+          console.log(`send_usd ${send_usd} gas ${gas_usd}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-            send_qty, send_coin, send_comment, gas_fee, gas_coin, txid, hash));
+            send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
           gas_fee = 0;
         }
       });
@@ -518,9 +624,9 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           recv_usd = recv_qty * coin_value/100000000;
           recv_comment = msg;
           gas_fee = ''; // No fee to  receive
-          console.log(`${recv_qty} ${recv_coin}`);
+          console.log(`${recv_qty} ${coin_value} ${recv_coin} usd ${recv_usd}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-            send_qty, send_coin, send_comment, gas_fee, gas_coin, txid, hash));
+            send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
         }
       });
     } else {
