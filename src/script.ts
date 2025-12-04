@@ -1,4 +1,4 @@
-import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate } from './wallet.js';
+import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate, setMintSummary, MintSummaryPeriod } from './wallet.js';
 
   // Function to validate the file name
   function validateFileName(fileName: string): boolean {
@@ -18,9 +18,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Get elements for inputs
     const addressInput = document.getElementById('address') as HTMLInputElement;
     const csvFormatSelect = document.getElementById('csvFormat') as HTMLSelectElement;
+    const mintSummarySelect = document.getElementById('mintSummary') as HTMLSelectElement;
     const startDateInput = document.getElementById('startDate') as HTMLInputElement;
     const endDateInput = document.getElementById('endDate') as HTMLInputElement;
-    const watchedInputs = [addressInput, csvFormatSelect, startDateInput, endDateInput];
+    const watchedInputs = [addressInput, csvFormatSelect, mintSummarySelect, startDateInput, endDateInput];
 
     const disableDownloadBtn = (message?: string) => {
       downloadBtn.disabled = true;
@@ -55,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set initial configurations
     setAddress(addressInput.value);
     setCsvFormat(CSVFormat[csvFormatSelect.value as keyof typeof CSVFormat]);
+    setMintSummary(MintSummaryPeriod[mintSummarySelect.value as keyof typeof MintSummaryPeriod]);
   
     // Handle form submission
     document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
@@ -62,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
         const address = (document.getElementById('address') as HTMLInputElement).value;
         const csvFormat = (document.getElementById('csvFormat') as HTMLSelectElement).value;
+        const mintSummary = (document.getElementById('mintSummary') as HTMLSelectElement).value;
         const startDateStr = (document.getElementById('startDate') as HTMLInputElement).value;
         const endDateStr = (document.getElementById('endDate') as HTMLInputElement).value;
         const fileNameInput = document.getElementById('filename') as HTMLInputElement;
@@ -84,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set configuration
         setAddress(address);
         setCsvFormat(csvFormat as CSVFormat);
+        setMintSummary(MintSummaryPeriod[mintSummary as keyof typeof MintSummaryPeriod]);
     
         let startEpoch: number | null = null;
         let endEpoch: number | null = null;

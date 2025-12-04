@@ -93,6 +93,14 @@ interface FluxPricePoint {
   price: number;
 }
 
+export enum MintSummaryPeriod {
+  None = "None",
+  Hourly = "Hourly",
+  Daily = "Daily",
+  Weekly = "Weekly",
+  Monthly = "Monthly",
+}
+
 // wallet.ts
 
 export enum CSVFormat {
@@ -113,6 +121,7 @@ var csvRecord: any;
 let csvSent: string = "SENT";
 let csvReceived: string = "RECEIVED";
 let csvMined: string = "MINED";
+let mintSummary: MintSummaryPeriod = MintSummaryPeriod.None;
 
 // Well known Flux Wallets
 
@@ -207,6 +216,102 @@ async function liveUpdates(dateTime: number): Promise<number | null> {
   return null;
 }
 
+const mintPeriodSeconds: Record<MintSummaryPeriod, number> = {
+  [MintSummaryPeriod.None]: 0,
+  [MintSummaryPeriod.Hourly]: 60 * 60,
+  [MintSummaryPeriod.Daily]: 24 * 60 * 60,
+  [MintSummaryPeriod.Weekly]: 7 * 24 * 60 * 60,
+  [MintSummaryPeriod.Monthly]: 30 * 24 * 60 * 60,
+};
+
+interface MintSummaryState {
+  periodStart: number;
+  periodEnd: number;
+  recvSat: number;
+  recvUsd: number;
+  lastTimestamp: number;
+}
+
+let mintState: MintSummaryState | null = null;
+
+function resetMintSummary(): void {
+  mintState = null;
+}
+
+function flushMintSummaryUpTo(cutoff: number, data: string[]): void {
+  if (!mintState || mintSummary === MintSummaryPeriod.None) return;
+  const periodSec = mintPeriodSeconds[mintSummary];
+  while (mintState && cutoff >= mintState.periodEnd) {
+    if (mintState.recvSat > 0) {
+      data.push(csvRecord(
+        mintState.lastTimestamp,
+        csvMined,
+        mintState.recvSat,
+        "FLUX",
+        "",
+        "",
+        "",
+        "",
+        0,
+        "",
+        mintState.recvUsd,
+        "USD",
+        "",
+        ""
+      ));
+    }
+    const nextStart: number = mintState.periodEnd;
+    mintState = {
+      periodStart: nextStart,
+      periodEnd: nextStart + periodSec,
+      recvSat: 0,
+      recvUsd: 0,
+      lastTimestamp: nextStart,
+    };
+  }
+}
+
+function addMintRecord(dateTime: number, recvSat: number, recvUsd: number, data: string[]): void {
+  if (mintSummary === MintSummaryPeriod.None) return;
+  const periodSec = mintPeriodSeconds[mintSummary];
+  if (!mintState) {
+    mintState = {
+      periodStart: dateTime,
+      periodEnd: dateTime + periodSec,
+      recvSat: 0,
+      recvUsd: 0,
+      lastTimestamp: dateTime,
+    };
+  }
+  flushMintSummaryUpTo(dateTime, data);
+  if (!mintState) return;
+  mintState.recvSat += recvSat;
+  mintState.recvUsd += recvUsd;
+  mintState.lastTimestamp = dateTime;
+}
+
+function finalizeMintSummary(data: string[]): void {
+  if (mintState && mintSummary !== MintSummaryPeriod.None && mintState.recvSat > 0) {
+    data.push(csvRecord(
+      mintState.lastTimestamp,
+      csvMined,
+      mintState.recvSat,
+      "FLUX",
+      "",
+      "",
+      "",
+      "",
+      0,
+      "",
+      mintState.recvUsd,
+      "USD",
+      "",
+      ""
+    ));
+  }
+  resetMintSummary();
+}
+
 export async function getPrice(dateTime: number): Promise<number | null> {
   const prices = await loadFluxPrices();
   const pricePoints = prices ?? [];
@@ -282,6 +387,11 @@ export function setStartDate(value: number): void {
 
 export function setEndDate(value: number): void {
   endDate = value;
+}
+
+export function setMintSummary(value: MintSummaryPeriod): void {
+  mintSummary = value;
+  resetMintSummary();
 }
 
 // Utility to format date and time to epoch time
@@ -546,6 +656,8 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
   var gas_coin: string = "";
   var gas_usd: number = 0;
 
+  flushMintSummaryUpTo(dateTime, data);
+
   if (single) {
     console.log(`My Address ${myAddress}`);
     console.log(`vin sum`);console.log(vinsum);
@@ -577,9 +689,12 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     console.log(`recv_usd ${recv_usd}`);
     gas_fee = 0;
     gas_usd = 0;
-    //console.log(`Mined ${date}`);
-    data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-      send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
+    if (mintSummary === MintSummaryPeriod.None) {
+      data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
+        send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
+    } else {
+      addMintRecord(dateTime, recv_qty as number, recv_usd as number, data);
+    }
   } else { // 
     if (Object.keys(vinsum).length == 1) {
       send_adr = Object.keys(vinsum)[0];
@@ -649,6 +764,8 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
 
     let data: string[] = [];
     let rows: number = 0;
+    let numtxn : number = 0;
+    resetMintSummary();
     if (!TXNs || !TXNs.data) {
       console.log(responseData);
       console.error("Invalid response structure.");
@@ -713,7 +830,10 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
     data.push(csvHeader);
     rows = rows + 1;
 
-    for (let index = start; index >= finish; index--) {
+    const loopStart = Math.max(start, finish);   // older txn index if API returns newest first
+    const loopEnd = Math.min(start, finish);     // newest txn index
+
+    for (let index = loopStart; index >= loopEnd; index--) {
       var txn: Txn;
       if (txns[index] == undefined) txn = await fetchTransaction(txids[index].txid);
       else txn = txns[index];
@@ -724,8 +844,12 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       if (newrows !== null) {
         newrows?.forEach(row => { data.push(row); rows = rows + 1;});
       }
-      updateStatus(`Processed ${rows-1} transactions.`); // Don't count header row
+      numtxn++;
+      updateStatus(`Processed ${numtxn} transactions.`); // Don't count header row
     }
+    const beforeSummary = data.length;
+    finalizeMintSummary(data);
+    rows = rows + (data.length - beforeSummary);
     return {data, rows};
   } catch (error) {
     console.error("Error parsing or processing wallet data:", error);
