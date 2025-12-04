@@ -216,14 +216,6 @@ async function liveUpdates(dateTime: number): Promise<number | null> {
   return null;
 }
 
-const mintPeriodSeconds: Record<MintSummaryPeriod, number> = {
-  [MintSummaryPeriod.None]: 0,
-  [MintSummaryPeriod.Hourly]: 60 * 60,
-  [MintSummaryPeriod.Daily]: 24 * 60 * 60,
-  [MintSummaryPeriod.Weekly]: 7 * 24 * 60 * 60,
-  [MintSummaryPeriod.Monthly]: 30 * 24 * 60 * 60,
-};
-
 interface MintSummaryState {
   periodStart: number;
   periodEnd: number;
@@ -238,9 +230,39 @@ function resetMintSummary(): void {
   mintState = null;
 }
 
+function bucketStartFor(period: MintSummaryPeriod, timestamp: number): number {
+  const date = new Date(timestamp * 1000); // UTC
+  if (period === MintSummaryPeriod.Hourly) {
+    date.setUTCMinutes(0, 0, 0);
+  } else if (period === MintSummaryPeriod.Daily) {
+    date.setUTCHours(0, 0, 0, 0);
+  } else if (period === MintSummaryPeriod.Weekly) {
+    date.setUTCHours(0, 0, 0, 0);
+    const day = date.getUTCDay(); // Sunday=0
+    date.setUTCDate(date.getUTCDate() - day);
+  } else if (period === MintSummaryPeriod.Monthly) {
+    date.setUTCDate(1);
+    date.setUTCHours(0, 0, 0, 0);
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
+function bucketEndFor(period: MintSummaryPeriod, bucketStart: number): number {
+  const date = new Date(bucketStart * 1000);
+  if (period === MintSummaryPeriod.Hourly) {
+    date.setUTCHours(date.getUTCHours() + 1);
+  } else if (period === MintSummaryPeriod.Daily) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  } else if (period === MintSummaryPeriod.Weekly) {
+    date.setUTCDate(date.getUTCDate() + 7);
+  } else if (period === MintSummaryPeriod.Monthly) {
+    date.setUTCMonth(date.getUTCMonth() + 1);
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
 function flushMintSummaryUpTo(cutoff: number, data: string[]): void {
   if (!mintState || mintSummary === MintSummaryPeriod.None) return;
-  const periodSec = mintPeriodSeconds[mintSummary];
   while (mintState && cutoff >= mintState.periodEnd) {
     if (mintState.recvSat > 0) {
       data.push(csvRecord(
@@ -263,7 +285,7 @@ function flushMintSummaryUpTo(cutoff: number, data: string[]): void {
     const nextStart: number = mintState.periodEnd;
     mintState = {
       periodStart: nextStart,
-      periodEnd: nextStart + periodSec,
+      periodEnd: bucketEndFor(mintSummary, nextStart),
       recvSat: 0,
       recvUsd: 0,
       lastTimestamp: nextStart,
@@ -273,14 +295,14 @@ function flushMintSummaryUpTo(cutoff: number, data: string[]): void {
 
 function addMintRecord(dateTime: number, recvSat: number, recvUsd: number, data: string[]): void {
   if (mintSummary === MintSummaryPeriod.None) return;
-  const periodSec = mintPeriodSeconds[mintSummary];
   if (!mintState) {
+    const start = bucketStartFor(mintSummary, dateTime);
     mintState = {
-      periodStart: dateTime,
-      periodEnd: dateTime + periodSec,
+      periodStart: start,
+      periodEnd: bucketEndFor(mintSummary, start),
       recvSat: 0,
       recvUsd: 0,
-      lastTimestamp: dateTime,
+      lastTimestamp: start,
     };
   }
   flushMintSummaryUpTo(dateTime, data);
