@@ -112,7 +112,7 @@ export enum CSVFormat {
 
 export let single: boolean = false;
 export let Address: string = "";
-export let csvFormat: CSVFormat = CSVFormat.CoinLedger;
+export let csvFormat: CSVFormat = CSVFormat.Koinly;
 export let testTxid: string = "";
 export let startDate: number = 0;
 export let endDate: number = 0;
@@ -379,6 +379,7 @@ export function setCsvFormat(value: CSVFormat): void {
     csvReceived = "Income";
     csvMined = "Mining";
   }
+  if (csvFormat !== CSVFormat.Koinly) setMintSummary(MintSummaryPeriod.None);
 }
 
 export function setStartDate(value: number): void {

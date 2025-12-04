@@ -48,6 +48,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const eventType = input instanceof HTMLSelectElement ? 'change' : 'input';
       input.addEventListener(eventType, handleInputChange);
     });
+
+    const updateMintSummaryAvailability = () => {
+      const isKoinly = csvFormatSelect.value === CSVFormat.Koinly;
+      if (!isKoinly) {
+        mintSummarySelect.value = MintSummaryPeriod.None;
+        mintSummarySelect.disabled = true;
+        setMintSummary(MintSummaryPeriod.None);
+      } else {
+        mintSummarySelect.disabled = false;
+        setMintSummary(MintSummaryPeriod[mintSummarySelect.value as keyof typeof MintSummaryPeriod]);
+      }
+    };
+
+    csvFormatSelect.addEventListener('change', updateMintSummaryAvailability);
   
     // Parse the date inputs
     const startDate = startDateInput.value ? parseDateToEpoch(startDateInput.value) : null;
@@ -56,7 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set initial configurations
     setAddress(addressInput.value);
     setCsvFormat(CSVFormat[csvFormatSelect.value as keyof typeof CSVFormat]);
-    setMintSummary(MintSummaryPeriod[mintSummarySelect.value as keyof typeof MintSummaryPeriod]);
+    const initialMintSummary = mintSummarySelect.value as keyof typeof MintSummaryPeriod;
+    setMintSummary(MintSummaryPeriod[initialMintSummary]);
+    updateMintSummaryAvailability();
   
     // Handle form submission
     document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
@@ -88,6 +104,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setAddress(address);
         setCsvFormat(csvFormat as CSVFormat);
         setMintSummary(MintSummaryPeriod[mintSummary as keyof typeof MintSummaryPeriod]);
+
+        updateMintSummaryAvailability();
     
         let startEpoch: number | null = null;
         let endEpoch: number | null = null;
