@@ -29,8 +29,18 @@
       <label for="csvFormat">CSV Format:</label>
       <select id="csvFormat" name="csvFormat" required>
         <option value="CoinLedger">CoinLedger</option>
-        <option value="Koinly">Koinly</option>
+        <option value="Koinly" selected>Koinly</option>
         <option value="CoinTracker">CoinTracker</option>
+      </select>
+
+      <!-- Mining Summary Selector -->
+      <label for="mintSummary">Mining Summary:</label>
+      <select id="mintSummary" name="mintSummary" required>
+        <option value="None" selected>None</option>
+        <option value="Hourly">Hourly</option>
+        <option value="Daily">Daily</option>
+        <option value="Weekly">Weekly</option>
+        <option value="Monthly">Monthly</option>
       </select>
 
       <!-- Start Date Input -->
@@ -64,6 +74,7 @@
 
     <!-- Download Button -->
     <button id="downloadBtn" disabled aria-disabled="true">Download CSV</button>
+    <p id="downloadNotice" class="field-help" role="status" aria-live="polite"></p>
   </div>
 
   <section class="donations">
@@ -78,7 +89,7 @@
   <script type="module" src="script.js"></script>
 
   <footer>
-    <p>FluxExport ver __APP_VERSION__ &copy; 2024 Thomas A. Moulton, W2VY. All rights reserved.</p>
+    <p>FluxExport ver __APP_VERSION__ &copy; 2025 Thomas A. Moulton, W2VY. All rights reserved.</p>
   </footer>
 </body>
 </html>

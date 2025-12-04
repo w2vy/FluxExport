@@ -1,4 +1,4 @@
-import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate } from './wallet.js';
+import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate, setMintSummary, MintSummaryPeriod } from './wallet.js';
 
   // Function to validate the file name
   function validateFileName(fileName: string): boolean {
@@ -13,12 +13,55 @@ let downloadFileName = "";
 document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
     const statusMessage = document.getElementById('status') as HTMLParagraphElement;
+    const downloadNotice = document.getElementById('downloadNotice') as HTMLParagraphElement;
   
     // Get elements for inputs
     const addressInput = document.getElementById('address') as HTMLInputElement;
     const csvFormatSelect = document.getElementById('csvFormat') as HTMLSelectElement;
+    const mintSummarySelect = document.getElementById('mintSummary') as HTMLSelectElement;
     const startDateInput = document.getElementById('startDate') as HTMLInputElement;
     const endDateInput = document.getElementById('endDate') as HTMLInputElement;
+    const watchedInputs = [addressInput, csvFormatSelect, mintSummarySelect, startDateInput, endDateInput];
+
+    const disableDownloadBtn = (message?: string) => {
+      downloadBtn.disabled = true;
+      downloadBtn.setAttribute('aria-disabled', 'true');
+      if (downloadNotice) {
+        downloadNotice.textContent = message ?? 'Download unavailable until you refresh with the latest inputs.';
+      }
+    };
+
+    const enableDownloadBtn = () => {
+      downloadBtn.disabled = false;
+      downloadBtn.setAttribute('aria-disabled', 'false');
+      if (downloadNotice) {
+        downloadNotice.textContent = 'Download ready. Click the button to save your CSV.';
+      }
+    };
+
+    const handleInputChange = () => {
+      disableDownloadBtn('Inputs changed—run "Get Wallet" again to enable downloads.');
+      updateStatusMessage('Inputs changed. Run "Get Wallet" to refresh.');
+    };
+
+    watchedInputs.forEach((input) => {
+      const eventType = input instanceof HTMLSelectElement ? 'change' : 'input';
+      input.addEventListener(eventType, handleInputChange);
+    });
+
+    const updateMintSummaryAvailability = () => {
+      const isKoinly = csvFormatSelect.value === CSVFormat.Koinly;
+      if (!isKoinly) {
+        mintSummarySelect.value = MintSummaryPeriod.None;
+        mintSummarySelect.disabled = true;
+        setMintSummary(MintSummaryPeriod.None);
+      } else {
+        mintSummarySelect.disabled = false;
+        setMintSummary(MintSummaryPeriod[mintSummarySelect.value as keyof typeof MintSummaryPeriod]);
+      }
+    };
+
+    csvFormatSelect.addEventListener('change', updateMintSummaryAvailability);
   
     // Parse the date inputs
     const startDate = startDateInput.value ? parseDateToEpoch(startDateInput.value) : null;
@@ -27,6 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set initial configurations
     setAddress(addressInput.value);
     setCsvFormat(CSVFormat[csvFormatSelect.value as keyof typeof CSVFormat]);
+    const initialMintSummary = mintSummarySelect.value as keyof typeof MintSummaryPeriod;
+    setMintSummary(MintSummaryPeriod[initialMintSummary]);
+    updateMintSummaryAvailability();
   
     // Handle form submission
     document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
@@ -34,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
         const address = (document.getElementById('address') as HTMLInputElement).value;
         const csvFormat = (document.getElementById('csvFormat') as HTMLSelectElement).value;
+        const mintSummary = (document.getElementById('mintSummary') as HTMLSelectElement).value;
         const startDateStr = (document.getElementById('startDate') as HTMLInputElement).value;
         const endDateStr = (document.getElementById('endDate') as HTMLInputElement).value;
         const fileNameInput = document.getElementById('filename') as HTMLInputElement;
@@ -56,6 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set configuration
         setAddress(address);
         setCsvFormat(csvFormat as CSVFormat);
+        setMintSummary(MintSummaryPeriod[mintSummary as keyof typeof MintSummaryPeriod]);
+
+        updateMintSummaryAvailability();
     
         let startEpoch: number | null = null;
         let endEpoch: number | null = null;
@@ -85,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         downloadFileName = fileName;
         cvsDownloadData = "";
-        downloadBtn.disabled = true;
+        disableDownloadBtn();
         // Call getwallet and enable download button on success
         getwallet(updateStatusMessage).then(({data, rows}) => {
             // Save the download data
@@ -93,10 +143,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (rows > 1) {
                 // Once getwallet is done, enable the download button
-                downloadBtn.disabled = false;
+                enableDownloadBtn();
                 updateStatusMessage('Ready for download');
             } else {
-                downloadBtn.disabled = true;
+                disableDownloadBtn('No transactions available for the selected filters.');
                 updateStatusMessage('No transactions found for this address or date range.');
             }
         }).catch((error) => {

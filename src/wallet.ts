@@ -1,3 +1,27 @@
+
+
+
+/*
+
+Links to support documents on the CSV formats
+
+CoinTracker.io
+https://support.cointracker.io/hc/en-us/articles/4413071299729-Convert-your-transaction-history-to-CoinTracker-CSV
+https://support.cointracker.io/hc/en-us/articles/4413049710225-Transaction-category-definitions
+
+KOinly.io
+https://support.koinly.io/en/articles/9489976-how-to-create-a-custom-csv-file-with-your-data
+https://support.koinly.io/en/articles/9490023-what-are-tags
+https://support.koinly.io/en/articles/9490024-how-koinly-handles-transfers-between-your-own-wallets
+
+CoinLedger.io
+
+https://help.coinledger.io/en/articles/6028758-universal-manual-import-template-guide#h_0aa95c28d0
+
+I would like to add an option to the user to group the transactions by day, week, month or single transactions. 
+*/
+
+
 interface Txid {
   txid: string;
 }
@@ -64,6 +88,19 @@ interface vsum {
   [key: string]: number;
 }
 
+interface FluxPricePoint {
+  timestamp: number;
+  price: number;
+}
+
+export enum MintSummaryPeriod {
+  None = "None",
+  Hourly = "Hourly",
+  Daily = "Daily",
+  Weekly = "Weekly",
+  Monthly = "Monthly",
+}
+
 // wallet.ts
 
 export enum CSVFormat {
@@ -75,7 +112,7 @@ export enum CSVFormat {
 
 export let single: boolean = false;
 export let Address: string = "";
-export let csvFormat: CSVFormat = CSVFormat.CoinLedger;
+export let csvFormat: CSVFormat = CSVFormat.Koinly;
 export let testTxid: string = "";
 export let startDate: number = 0;
 export let endDate: number = 0;
@@ -84,6 +121,7 @@ var csvRecord: any;
 let csvSent: string = "SENT";
 let csvReceived: string = "RECEIVED";
 let csvMined: string = "MINED";
+let mintSummary: MintSummaryPeriod = MintSummaryPeriod.None;
 
 // Well known Flux Wallets
 
@@ -109,6 +147,222 @@ const KnownWallets: { [key: string]: string } = {
 function getWalletName(adr: string) : string {
   if (adr in KnownWallets) return KnownWallets[adr];
   return adr;
+}
+
+const HOUR_IN_SECONDS = 60 * 60;
+let cachedFluxPrices: FluxPricePoint[] | null = null;
+let loadingFluxPrices: Promise<FluxPricePoint[] | null> | null = null;
+
+function isFluxPricePoint(entry: unknown): entry is FluxPricePoint {
+  return typeof entry === "object" &&
+    entry !== null &&
+    typeof (entry as FluxPricePoint).timestamp === "number" &&
+    typeof (entry as FluxPricePoint).price === "number";
+}
+
+function cacheFluxPricePoint(timestamp: number, price: number): void {
+  if (!Number.isFinite(price) || price === 0) return;
+  if (!cachedFluxPrices) cachedFluxPrices = [];
+  let low = 0;
+  let high = cachedFluxPrices.length - 1;
+  let insertIdx = cachedFluxPrices.length;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const midTimestamp = cachedFluxPrices[mid].timestamp;
+    if (midTimestamp === timestamp) {
+      cachedFluxPrices[mid] = { timestamp, price };
+      return;
+    }
+    if (midTimestamp < timestamp) {
+      low = mid + 1;
+    } else {
+      insertIdx = mid;
+      high = mid - 1;
+    }
+  }
+  cachedFluxPrices.splice(insertIdx, 0, { timestamp, price });
+}
+
+async function loadFluxPrices(): Promise<FluxPricePoint[] | null> {
+  if (cachedFluxPrices) return cachedFluxPrices;
+  if (loadingFluxPrices) return loadingFluxPrices;
+
+  loadingFluxPrices = (async () => {
+    try {
+      // wallet.js sits next to flux.json in dist/, so a local relative URL works when served.
+      const fluxUrl = new URL('./flux.json', import.meta.url);
+      const response = await fetch(fluxUrl);
+      if (!response.ok) {
+        console.error(`Failed to load flux.json (${fluxUrl}): ${response.status} ${response.statusText}`);
+        return null;
+      }
+      const data = await response.json();
+      const parsed: FluxPricePoint[] = Array.isArray(data?.prices) ? data.prices.filter(isFluxPricePoint) : [];
+      cachedFluxPrices = parsed.sort((a, b) => a.timestamp - b.timestamp);
+      return cachedFluxPrices;
+    } catch (error) {
+      console.error('Error loading flux.json', error);
+      return null;
+    } finally {
+      loadingFluxPrices = null;
+    }
+  })();
+
+  return loadingFluxPrices;
+}
+
+async function liveUpdates(dateTime: number): Promise<number | null> {
+  console.warn(`liveUpdates stub called for ${dateTime}; live price fetch not implemented yet.`);
+  return null;
+}
+
+interface MintSummaryState {
+  periodStart: number;
+  periodEnd: number;
+  recvSat: number;
+  recvUsd: number;
+  lastTimestamp: number;
+}
+
+let mintState: MintSummaryState | null = null;
+
+function resetMintSummary(): void {
+  mintState = null;
+}
+
+function bucketStartFor(period: MintSummaryPeriod, timestamp: number): number {
+  const date = new Date(timestamp * 1000); // UTC
+  if (period === MintSummaryPeriod.Hourly) {
+    date.setUTCMinutes(0, 0, 0);
+  } else if (period === MintSummaryPeriod.Daily) {
+    date.setUTCHours(0, 0, 0, 0);
+  } else if (period === MintSummaryPeriod.Weekly) {
+    date.setUTCHours(0, 0, 0, 0);
+    const day = date.getUTCDay(); // Sunday=0
+    date.setUTCDate(date.getUTCDate() - day);
+  } else if (period === MintSummaryPeriod.Monthly) {
+    date.setUTCDate(1);
+    date.setUTCHours(0, 0, 0, 0);
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
+function bucketEndFor(period: MintSummaryPeriod, bucketStart: number): number {
+  const date = new Date(bucketStart * 1000);
+  if (period === MintSummaryPeriod.Hourly) {
+    date.setUTCHours(date.getUTCHours() + 1);
+  } else if (period === MintSummaryPeriod.Daily) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  } else if (period === MintSummaryPeriod.Weekly) {
+    date.setUTCDate(date.getUTCDate() + 7);
+  } else if (period === MintSummaryPeriod.Monthly) {
+    date.setUTCMonth(date.getUTCMonth() + 1);
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
+function flushMintSummaryUpTo(cutoff: number, data: string[]): void {
+  if (!mintState || mintSummary === MintSummaryPeriod.None) return;
+  while (mintState && cutoff >= mintState.periodEnd) {
+    if (mintState.recvSat > 0) {
+      data.push(csvRecord(
+        mintState.lastTimestamp,
+        csvMined,
+        mintState.recvSat,
+        "FLUX",
+        "",
+        "",
+        "",
+        "",
+        0,
+        "",
+        mintState.recvUsd,
+        "USD",
+        "",
+        ""
+      ));
+    }
+    const nextStart: number = mintState.periodEnd;
+    mintState = {
+      periodStart: nextStart,
+      periodEnd: bucketEndFor(mintSummary, nextStart),
+      recvSat: 0,
+      recvUsd: 0,
+      lastTimestamp: nextStart,
+    };
+  }
+}
+
+function addMintRecord(dateTime: number, recvSat: number, recvUsd: number, data: string[]): void {
+  if (mintSummary === MintSummaryPeriod.None) return;
+  if (!mintState) {
+    const start = bucketStartFor(mintSummary, dateTime);
+    mintState = {
+      periodStart: start,
+      periodEnd: bucketEndFor(mintSummary, start),
+      recvSat: 0,
+      recvUsd: 0,
+      lastTimestamp: start,
+    };
+  }
+  flushMintSummaryUpTo(dateTime, data);
+  if (!mintState) return;
+  mintState.recvSat += recvSat;
+  mintState.recvUsd += recvUsd;
+  mintState.lastTimestamp = dateTime;
+}
+
+function finalizeMintSummary(data: string[]): void {
+  if (mintState && mintSummary !== MintSummaryPeriod.None && mintState.recvSat > 0) {
+    data.push(csvRecord(
+      mintState.lastTimestamp,
+      csvMined,
+      mintState.recvSat,
+      "FLUX",
+      "",
+      "",
+      "",
+      "",
+      0,
+      "",
+      mintState.recvUsd,
+      "USD",
+      "",
+      ""
+    ));
+  }
+  resetMintSummary();
+}
+
+export async function getPrice(dateTime: number): Promise<number | null> {
+  const prices = await loadFluxPrices();
+  const pricePoints = prices ?? [];
+  if (!prices && cachedFluxPrices === null) {
+    cachedFluxPrices = pricePoints;
+  }
+  if (pricePoints.length > 0) {
+    let low = 0;
+    let high = pricePoints.length - 1;
+    let idx = -1;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (pricePoints[mid].timestamp <= dateTime) {
+        idx = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    if (idx !== -1) {
+      const candidate = pricePoints[idx];
+      const next = pricePoints[idx + 1];
+      const windowEnd = next ? next.timestamp : candidate.timestamp + HOUR_IN_SECONDS;
+      if (dateTime < windowEnd) return candidate.price;
+    }
+  }
+  const livePrice = await liveUpdates(dateTime);
+  if (livePrice && livePrice !== 0) cacheFluxPricePoint(dateTime, livePrice);
+  return livePrice;
 }
 
 // Setter functions
@@ -147,6 +401,7 @@ export function setCsvFormat(value: CSVFormat): void {
     csvReceived = "Income";
     csvMined = "Mining";
   }
+  if (csvFormat !== CSVFormat.Koinly) setMintSummary(MintSummaryPeriod.None);
 }
 
 export function setStartDate(value: number): void {
@@ -155,6 +410,11 @@ export function setStartDate(value: number): void {
 
 export function setEndDate(value: number): void {
   endDate = value;
+}
+
+export function setMintSummary(value: MintSummaryPeriod): void {
+  mintSummary = value;
+  resetMintSummary();
 }
 
 // Utility to format date and time to epoch time
@@ -266,7 +526,7 @@ function isValidTxid(txid: string): boolean {
 
 function send_csv_ct(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any,
-  send_coin: string, send_comment: string, gas_fee: string | number,  gas_coin: string, txid: string, hash: string
+  send_coin: string, send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
 ): string {
   const date:string = formatTimestamp(dateTime, true);
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
@@ -280,7 +540,7 @@ function send_csv_ct(
 
 function send_csv_cl(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string,
-  send_comment: string, gas_fee: string | number, gas_coin: string, txid: string, hash: string
+  send_comment: string, gas_fee: string | number, gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
 ): string {
   const date:string = formatTimestamp(dateTime, true);
   if (tag == csvSent) {
@@ -310,7 +570,7 @@ function send_csv_cl(
 
 function send_csv_ko(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string,
-  send_comment: string, gas_fee: string | number,  gas_coin: string, txid: string, hash: string
+  send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
 ): string {
   const date:string = formatTimestampKO(dateTime); // UTC format needed
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
@@ -324,7 +584,7 @@ function send_csv_ko(
     if (send_comment.length > 0) comment = comment + ", " + send_comment;
   } else comment = send_comment;
   const csvRow = [
-    date, send_qty, send_coin, recv_qty, recv_coin, gas_fee, gas_coin, "", "", tag, comment, hash
+    date, send_qty, send_coin, recv_qty, recv_coin, gas_fee, gas_coin, net_usd, currency, tag, comment, hash
   ].join(",");
   return csvRow;
 }
@@ -371,6 +631,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
   var skip:boolean = false;
   var voutAllMe: boolean = true;
   const dateTime: number = txn.data.time;
+  var coin_value: number;
   const txid: string = txn.data.txid
   const hash: string = txn.data.blockhash;
 
@@ -398,8 +659,8 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         }
     });
   }
-  //console.log(`Time is ${txn.data.time}`);
-  var coin_value:number = 0.75;
+  coin_value = (await getPrice(dateTime)) ?? 0.75;
+  console.log(`Time is ${dateTime} price ${coin_value}`);
   var msg: string = "";
   var type: string = "";
   var recv_qty : string | number = "";
@@ -418,6 +679,8 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
   var gas_coin: string = "";
   var gas_usd: number = 0;
 
+  flushMintSummaryUpTo(dateTime, data);
+
   if (single) {
     console.log(`My Address ${myAddress}`);
     console.log(`vin sum`);console.log(vinsum);
@@ -430,14 +693,15 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     type = csvSent;
     send_qty = 0;
     send_coin = "FLUX";
-    send_usd = "0";
+    send_usd = 0;
     send_adr = myAddress;
     recv_adr = myAddress;
     gas_coin = "FLUX";
     gas_usd = gas_fee*coin_value/100000000;
+    console.log(`usd gas ${gas_usd}`);
     if (gas_fee > 0) { // if qty and gas 0, nothing to see here
       data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-        send_qty, send_coin, send_comment, gas_fee, gas_coin, txid, hash));
+        send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
     }
   } else if (mined) {
     if (single) console.log("Mined");
@@ -445,11 +709,15 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     recv_qty = voutList[myAddress];
     recv_coin = "FLUX";
     recv_usd = recv_qty*coin_value/100000000;
+    console.log(`recv_usd ${recv_usd}`);
     gas_fee = 0;
     gas_usd = 0;
-    //console.log(`Mined ${date}`);
-    data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-      send_qty, send_coin, send_comment, gas_fee, gas_coin, txid, hash));
+    if (mintSummary === MintSummaryPeriod.None) {
+      data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
+        send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
+    } else {
+      addMintRecord(dateTime, recv_qty as number, recv_usd as number, data);
+    }
   } else { // 
     if (Object.keys(vinsum).length == 1) {
       send_adr = Object.keys(vinsum)[0];
@@ -475,9 +743,9 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           send_comment = `Address: ${getWalletName(outAdr)}`;
           gas_coin = "FLUX";
           gas_usd = (gas_fee as number) * coin_value/100000000;
-  
+          console.log(`send_usd ${send_usd} gas ${gas_usd}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-            send_qty, send_coin, send_comment, gas_fee, gas_coin, txid, hash));
+            send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
           gas_fee = 0;
         }
       });
@@ -494,9 +762,9 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           recv_usd = recv_qty * coin_value/100000000;
           recv_comment = msg;
           gas_fee = ''; // No fee to  receive
-          console.log(`${recv_qty} ${recv_coin}`);
+          console.log(`${recv_qty} ${coin_value} ${recv_coin} usd ${recv_usd}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-            send_qty, send_coin, send_comment, gas_fee, gas_coin, txid, hash));
+            send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
         }
       });
     } else {
@@ -519,6 +787,8 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
 
     let data: string[] = [];
     let rows: number = 0;
+    let numtxn : number = 0;
+    resetMintSummary();
     if (!TXNs || !TXNs.data) {
       console.log(responseData);
       console.error("Invalid response structure.");
@@ -583,7 +853,10 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
     data.push(csvHeader);
     rows = rows + 1;
 
-    for (let index = start; index >= finish; index--) {
+    const loopStart = Math.max(start, finish);   // older txn index if API returns newest first
+    const loopEnd = Math.min(start, finish);     // newest txn index
+
+    for (let index = loopStart; index >= loopEnd; index--) {
       var txn: Txn;
       if (txns[index] == undefined) txn = await fetchTransaction(txids[index].txid);
       else txn = txns[index];
@@ -594,8 +867,12 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       if (newrows !== null) {
         newrows?.forEach(row => { data.push(row); rows = rows + 1;});
       }
-      updateStatus(`Processed ${rows-1} transactions.`); // Don't count header row
+      numtxn++;
+      updateStatus(`Processed ${numtxn} transactions.`); // Don't count header row
     }
+    const beforeSummary = data.length;
+    finalizeMintSummary(data);
+    rows = rows + (data.length - beforeSummary);
     return {data, rows};
   } catch (error) {
     console.error("Error parsing or processing wallet data:", error);
