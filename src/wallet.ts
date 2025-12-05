@@ -101,6 +101,11 @@ export enum MintSummaryPeriod {
   Monthly = "Monthly",
 }
 
+const TXN_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+type CachedTxn = { txid: string; txn: Txn; fetchedAt: number };
+const txnCacheMemory: Map<string, CachedTxn> = new Map();
+let txnCacheDbPromise: Promise<IDBDatabase | null> | null = null;
+
 // wallet.ts
 
 export enum CSVFormat {
@@ -228,6 +233,121 @@ let mintState: MintSummaryState | null = null;
 
 function resetMintSummary(): void {
   mintState = null;
+}
+
+export async function clearCaches(): Promise<void> {
+  cachedFluxPrices = null;
+  loadingFluxPrices = null;
+  txnCacheMemory.clear();
+  const db = await openTxnCache();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    const tx = db.transaction("txns", "readwrite");
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => resolve();
+    tx.onerror = () => resolve();
+    tx.objectStore("txns").clear();
+  });
+}
+
+function getIndexedDB(): IDBFactory | undefined {
+  if (typeof globalThis === "undefined") return undefined;
+  return (globalThis as any).indexedDB as IDBFactory | undefined;
+}
+
+async function openTxnCache(): Promise<IDBDatabase | null> {
+  if (txnCacheDbPromise) return txnCacheDbPromise;
+  const idb = getIndexedDB();
+  if (!idb) return null;
+  txnCacheDbPromise = new Promise((resolve) => {
+    const request = idb.open("FluxExportCache", 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains("txns")) {
+        db.createObjectStore("txns", { keyPath: "txid" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => {
+      console.error("IndexedDB open error", request.error);
+      resolve(null);
+    };
+  });
+  return txnCacheDbPromise;
+}
+
+function isTxnFresh(entry: CachedTxn): boolean {
+  return Date.now() - entry.fetchedAt < TXN_CACHE_TTL_MS;
+}
+
+async function getCachedTxn(txid: string): Promise<Txn | null> {
+  const mem = txnCacheMemory.get(txid);
+  if (mem && isTxnFresh(mem)) return mem.txn;
+
+  const db = await openTxnCache();
+  if (!db) return null;
+
+  return new Promise((resolve) => {
+    const tx = db.transaction("txns", "readwrite");
+    const store = tx.objectStore("txns");
+    const req = store.get(txid);
+    req.onsuccess = () => {
+      const record = req.result as CachedTxn | undefined;
+      if (record && isTxnFresh(record)) {
+        txnCacheMemory.set(txid, record);
+        resolve(record.txn);
+      } else {
+        if (record) store.delete(txid);
+        resolve(null);
+      }
+    };
+    req.onerror = () => resolve(null);
+  });
+}
+
+async function setCachedTxn(txid: string, txn: Txn): Promise<void> {
+  const entry: CachedTxn = { txid, txn, fetchedAt: Date.now() };
+  txnCacheMemory.set(txid, entry);
+  const db = await openTxnCache();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    const tx = db.transaction("txns", "readwrite");
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+    tx.onabort = () => resolve();
+    tx.objectStore("txns").put(entry);
+  });
+}
+
+export async function getCacheStats(): Promise<{ txCount: number; approxBytes: number }> {
+  const idb = await openTxnCache();
+  if (!idb) {
+    let bytes = 0;
+    txnCacheMemory.forEach((entry) => {
+      bytes += JSON.stringify(entry).length;
+    });
+    return { txCount: txnCacheMemory.size, approxBytes: bytes };
+  }
+
+  return new Promise((resolve) => {
+    let count = 0;
+    let bytes = 0;
+    const tx = idb.transaction("txns", "readonly");
+    const store = tx.objectStore("txns");
+    const req = store.openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (cursor) {
+        const entry = cursor.value as CachedTxn;
+        count++;
+        bytes += JSON.stringify(entry).length;
+        cursor.continue();
+      }
+    };
+    tx.oncomplete = () => resolve({ txCount: count, approxBytes: bytes });
+    tx.onerror = () => resolve({ txCount: 0, approxBytes: 0 });
+    tx.onabort = () => resolve({ txCount: 0, approxBytes: 0 });
+  });
 }
 
 function bucketStartFor(period: MintSummaryPeriod, timestamp: number): number {
@@ -590,6 +710,8 @@ function send_csv_ko(
 }
 
 export async function fetchTransaction(txid: string): Promise<Txn> {
+  const cached = await getCachedTxn(txid);
+  if (cached) return cached;
   const url = 'https://api.runonflux.io/daemon/getrawtransaction?verbose=1&txid=' + txid;
   if (!isValidTxid(txid)) console.log(`fetchTransaction: bad txid len ${txid.length} ${txid}`);
   else {
@@ -608,6 +730,7 @@ export async function fetchTransaction(txid: string): Promise<Txn> {
         await sleep(500);
         continue;
       }
+      await setCachedTxn(txid, txn);
       return txn;
     }
   }
@@ -869,10 +992,17 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
       }
       numtxn++;
       updateStatus(`Processed ${numtxn} transactions.`); // Don't count header row
+      if (numtxn === 10 || numtxn === 20) {
+        await sleep(400);
+      } else if (numtxn % 100 === 0) {
+        await sleep(100 + Math.floor(Math.random() * 100));
+      }
     }
     const beforeSummary = data.length;
     finalizeMintSummary(data);
     rows = rows + (data.length - beforeSummary);
+    updateStatus(`Processed ${rows-1} transactions.`);
+    await sleep(2000);
     return {data, rows};
   } catch (error) {
     console.error("Error parsing or processing wallet data:", error);

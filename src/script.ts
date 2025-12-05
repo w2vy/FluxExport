@@ -1,4 +1,4 @@
-import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate, setMintSummary, MintSummaryPeriod } from './wallet.js';
+import { getwallet, setSingle, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate, setMintSummary, MintSummaryPeriod, clearCaches, getCacheStats } from './wallet.js';
 
   // Function to validate the file name
   function validateFileName(fileName: string): boolean {
@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
     const statusMessage = document.getElementById('status') as HTMLParagraphElement;
     const downloadNotice = document.getElementById('downloadNotice') as HTMLParagraphElement;
+    const clearCacheBtn = document.getElementById('clearCacheBtn') as HTMLButtonElement;
+    const cacheInfo = document.getElementById('cacheInfo') as HTMLParagraphElement;
   
     // Get elements for inputs
     const addressInput = document.getElementById('address') as HTMLInputElement;
@@ -62,6 +64,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     csvFormatSelect.addEventListener('change', updateMintSummaryAvailability);
+    clearCacheBtn?.addEventListener('click', async () => {
+      await clearCaches();
+      updateStatusMessage('Cache cleared.');
+      disableDownloadBtn('Cache cleared. Run "Get Wallet" again.');
+      updateCacheInfo();
+    });
+
+    const updateCacheInfo = async () => {
+      if (!cacheInfo) return;
+      const { txCount, approxBytes } = await getCacheStats();
+      const kb = approxBytes / 1024;
+      cacheInfo.textContent = `Cache: ${txCount} transactions (~${kb.toFixed(1)} KB)`;
+    };
   
     // Parse the date inputs
     const startDate = startDateInput.value ? parseDateToEpoch(startDateInput.value) : null;
@@ -73,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialMintSummary = mintSummarySelect.value as keyof typeof MintSummaryPeriod;
     setMintSummary(MintSummaryPeriod[initialMintSummary]);
     updateMintSummaryAvailability();
+    updateCacheInfo();
   
     // Handle form submission
     document.getElementById('walletForm')?.addEventListener('submit', async (e) => {
@@ -106,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setMintSummary(MintSummaryPeriod[mintSummary as keyof typeof MintSummaryPeriod]);
 
         updateMintSummaryAvailability();
+        updateCacheInfo();
     
         let startEpoch: number | null = null;
         let endEpoch: number | null = null;
@@ -140,6 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         getwallet(updateStatusMessage).then(({data, rows}) => {
             // Save the download data
             data.forEach(row => { cvsDownloadData = cvsDownloadData + row + '\n'; });
+            updateCacheInfo();
 
             if (rows > 1) {
                 // Once getwallet is done, enable the download button
