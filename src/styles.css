@@ -117,15 +117,26 @@ body {
     color: #9ddcff;
   }
   
-  .donations p {
-    margin: 10px 0;
-    color: #eaf4ff;
-  }
-  
-  footer {
-    text-align: center;
-    padding: 20px 0;
-    background-color: #04101d;
-    color: #8fbbe5;
+.donations p {
+  margin: 10px 0;
+  color: #eaf4ff;
+}
+
+.cache-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cache-controls #cacheInfo {
+  margin: 0;
+}
+
+footer {
+  text-align: center;
+  padding: 20px 0;
+  background-color: #04101d;
+  color: #8fbbe5;
   }
   
