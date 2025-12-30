@@ -9,6 +9,8 @@ CoinTracker.io
 https://support.cointracker.io/hc/en-us/articles/4413071299729-Convert-your-transaction-history-to-CoinTracker-CSV
 https://support.cointracker.io/hc/en-us/articles/4413049710225-Transaction-category-definitions
 
+Referral link - 20% discount, earn 20% of their subscription https://cointracker.cello.so/fj79wD8eSRG
+
 KOinly.io
 https://support.koinly.io/en/articles/9489976-how-to-create-a-custom-csv-file-with-your-data
 https://support.koinly.io/en/articles/9490023-what-are-tags
@@ -157,6 +159,8 @@ function getWalletName(adr: string) : string {
 const HOUR_IN_SECONDS = 60 * 60;
 let cachedFluxPrices: FluxPricePoint[] | null = null;
 let loadingFluxPrices: Promise<FluxPricePoint[] | null> | null = null;
+let extendingFluxPrices: Promise<void> | null = null;
+let extendingTarget = 0;
 
 function isFluxPricePoint(entry: unknown): entry is FluxPricePoint {
   return typeof entry === "object" &&
@@ -216,9 +220,57 @@ async function loadFluxPrices(): Promise<FluxPricePoint[] | null> {
   return loadingFluxPrices;
 }
 
-async function liveUpdates(dateTime: number): Promise<number | null> {
-  console.warn(`liveUpdates stub called for ${dateTime}; live price fetch not implemented yet.`);
-  return null;
+async function fetchFluxPriceRange(start: number, end: number): Promise<FluxPricePoint[] | null> {
+  const url = new URL("https://flux.beer/api/prices/range");
+  url.searchParams.set("start", String(start));
+  url.searchParams.set("end", String(end));
+  try {
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      console.error(`Failed to fetch flux prices: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    const data = await response.json();
+    const parsed: FluxPricePoint[] = Array.isArray(data?.prices) ? data.prices.filter(isFluxPricePoint) : [];
+    return parsed;
+  } catch (error) {
+    console.error("Error fetching flux prices", error);
+    return null;
+  }
+}
+
+async function ensureFluxPriceCoverage(targetTimestamp: number): Promise<FluxPricePoint[] | null> {
+  const prices = await loadFluxPrices();
+  if (prices && !cachedFluxPrices) cachedFluxPrices = prices;
+  if (!cachedFluxPrices) cachedFluxPrices = [];
+  if (cachedFluxPrices.length === 0) return cachedFluxPrices;
+
+  const latest = cachedFluxPrices[cachedFluxPrices.length - 1].timestamp;
+  console.log(`ensureFluxPriceCoverage: latest ${latest} end ${targetTimestamp}`);
+  if (targetTimestamp <= latest) return cachedFluxPrices;
+
+  if (extendingFluxPrices && targetTimestamp <= extendingTarget) {
+    await extendingFluxPrices;
+    return cachedFluxPrices;
+  }
+
+  extendingTarget = targetTimestamp;
+  extendingFluxPrices = (async () => {
+    const start = latest + 1;
+    const fetched = await fetchFluxPriceRange(start, targetTimestamp);
+    if (Array.isArray(fetched)) {
+      fetched.forEach((entry) => cacheFluxPricePoint(entry.timestamp, entry.price));
+    }
+  })();
+
+  try {
+    await extendingFluxPrices;
+  } finally {
+    extendingFluxPrices = null;
+    extendingTarget = 0;
+  }
+
+  return cachedFluxPrices;
 }
 
 interface MintSummaryState {
@@ -238,6 +290,8 @@ function resetMintSummary(): void {
 export async function clearCaches(): Promise<void> {
   cachedFluxPrices = null;
   loadingFluxPrices = null;
+  extendingFluxPrices = null;
+  extendingTarget = 0;
   txnCacheMemory.clear();
   const db = await openTxnCache();
   if (!db) return;
@@ -455,11 +509,8 @@ function finalizeMintSummary(data: string[]): void {
 }
 
 export async function getPrice(dateTime: number): Promise<number | null> {
-  const prices = await loadFluxPrices();
-  const pricePoints = prices ?? [];
-  if (!prices && cachedFluxPrices === null) {
-    cachedFluxPrices = pricePoints;
-  }
+  const targetTimestamp = endDate > 0 ? Math.max(endDate, dateTime) : dateTime;
+  const pricePoints = await ensureFluxPriceCoverage(targetTimestamp) ?? [];
   if (pricePoints.length > 0) {
     let low = 0;
     let high = pricePoints.length - 1;
@@ -480,9 +531,7 @@ export async function getPrice(dateTime: number): Promise<number | null> {
       if (dateTime < windowEnd) return candidate.price;
     }
   }
-  const livePrice = await liveUpdates(dateTime);
-  if (livePrice && livePrice !== 0) cacheFluxPricePoint(dateTime, livePrice);
-  return livePrice;
+  return null;
 }
 
 // Setter functions
@@ -505,7 +554,7 @@ export function setCsvFormat(value: CSVFormat): void {
     csvHeader = "Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag";
     csvSent = "";
     csvReceived = "payment";
-    csvMined = "mining";
+    csvMined = "Staking";
   }
   if (csvFormat === CSVFormat.CoinLedger) {
     csvRecord = send_csv_cl;
@@ -561,13 +610,13 @@ export function parseDateToEpoch(dateTimeStr: string): number {
 // Existing functions from wallet.ts
 export function formatTimestamp(epochTime: number, usa: boolean): string {
   const date = new Date(epochTime * 1000);
-  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
-  const day = String(date.getDate()).padStart(2, '0');
-  const year = date.getFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Months are 0-based
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const year = date.getUTCFullYear();
 
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
   // Combine components into the desired format
   if (usa) return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
@@ -577,13 +626,13 @@ export function formatTimestamp(epochTime: number, usa: boolean): string {
 
 export function formatTimestampKO(epochTime: number): string {
   const date = new Date(epochTime * 1000);
-  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
-  const day = String(date.getDate()).padStart(2, '0');
-  const year = date.getFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Months are 0-based
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const year = date.getUTCFullYear();
 
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
   // Combine components into the desired format
 
