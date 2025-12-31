@@ -94,25 +94,22 @@
         </div>
         <div class="tab-panels">
           <div class="tab-panel" role="tabpanel" data-format="CoinTracker">
-            <p>This is the format I use for my accounts and the primary reason is that it can handle Flux Node Rewards
-              without adding to the Subscription Transaction count.</p>
-            <p>All of the formats will create duplicate transactions if you import any transactions that are already imported</p>
-            <p>If you import a partial year you need to make sure there is no overlap in transaction times.</p>
-            <p>You can only import a single wallet address at a time and
-              a transfer between two wallets will show up as a send out of one wallet and the receive into a different wallet.
-              If both of these wallets are controlled by you then once both wallets have been updated (synced) you must
-              use the CoinTracker Transaction page to link the send and receive together as a 'Transfer' to make it
-              non-taxable internal wallet transfer event.
-            </p>
-            <p>The same actions are needed for Flux Parallel Asset (PA) swaps, you can link between the PA Wallet Flux Token and
-               Flux blockchain and create a 'Bridge' transfer, again non-tabable.
-            </p>
+            <p>I found the Coin Tracker features useful and cost saving that this is the one I use!</p>
+            <ul class="bullet-list">
+              <li>Handles Flux Node Rewards without counting them against your subscription’s transaction limit.</li>
+              <li>Avoid overlapping date ranges; partial-year imports that overlap will create duplicates.</li>
+              <li>Import one wallet at a time. For transfers between your own wallets, link the outgoing and incoming entries as a “Transfer” in CoinTracker to mark them non-taxable.</li>
+              <li>For Flux Parallel Asset swaps, link the PA wallet token entry and the Flux chain entry as a “Bridge” transfer to keep it non-taxable.</li>
+            </ul>
+            <p class="bonus-note">BONUS: New Accoints Receive 20% Discount!<br>Sign up here: <a href="https://cointracker.cello.so/cOM1jhoGB7D" target="_blank" rel="noopener noreferrer">https://cointracker.cello.so/cOM1jhoGB7D</a><br>I receive a referral bonus after 30 days (the refund period).</p>
           </div>
           <div class="tab-panel" role="tabpanel" data-format="CoinLedger">
             <p>CoinLedger-specific guidance goes here. Add any tips or reminders for this format.</p>
           </div>
           <div class="tab-panel" role="tabpanel" data-format="Koinly">
-            <p>Koinly-specific guidance goes here. Add any tips or reminders for this format.</p>
+            <p>This format includes the net worth of each transaction and this tool uses hourly price data to calcualte it.</p>
+            <p>This format allows collecting node rewards and providing Hourly, Daily, Weekly or Monthy transactions.
+               The summary transactions include the sum of the net worth of each reward.</p>
           </div>
         </div>
       </div>

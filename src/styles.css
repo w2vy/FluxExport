@@ -211,6 +211,31 @@ input[type="datetime-local"]::-moz-focus-inner {
   display: block;
 }
 
+.bullet-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: #eaf4ff;
+}
+
+.bullet-list li {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.bonus-note {
+  margin: 8px 0 0;
+  color: #eaf4ff;
+}
+
+.bonus-note a {
+  color: #4ade80;
+}
+
+.bonus-note a:hover,
+.bonus-note a:focus {
+  color: #7cf0a2;
+}
+
 .donations p {
   margin: 10px 0;
   color: #eaf4ff;
