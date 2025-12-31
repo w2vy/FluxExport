@@ -9,7 +9,7 @@ CoinTracker.io
 https://support.cointracker.io/hc/en-us/articles/4413071299729-Convert-your-transaction-history-to-CoinTracker-CSV
 https://support.cointracker.io/hc/en-us/articles/4413049710225-Transaction-category-definitions
 
-Referral link - 20% discount, earn 20% of their subscription https://cointracker.cello.so/fj79wD8eSRG
+Referral link - 20% discount, earn 20% of their subscription https://cointracker.cello.so/cOM1jhoGB7D
 
 KOinly.io
 https://support.koinly.io/en/articles/9489976-how-to-create-a-custom-csv-file-with-your-data
@@ -126,6 +126,7 @@ export let endDate: number = 0;
 let csvHeader: string = "";
 var csvRecord: any;
 let csvSent: string = "SENT";
+let csvService: string = csvSent;
 let csvReceived: string = "RECEIVED";
 let csvMined: string = "MINED";
 let mintSummary: MintSummaryPeriod = MintSummaryPeriod.None;
@@ -554,12 +555,14 @@ export function setCsvFormat(value: CSVFormat): void {
     csvHeader = "Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag";
     csvSent = "";
     csvReceived = "payment";
+    csvService = "Service";
     csvMined = "Staking";
   }
   if (csvFormat === CSVFormat.CoinLedger) {
     csvRecord = send_csv_cl;
     csvHeader = "Date (UTC),Platform (Optional),Asset Sent,Amount Sent,Asset Received,Amount Received,Fee Currency (Optional),Fee Amount (Optional),Type,Description (Optional),TxHash (Optional)";
     csvSent = "Merchant Payment";
+    csvService = csvSent;
     csvReceived = "Income";
     csvMined = "Mining";
   }
@@ -567,6 +570,7 @@ export function setCsvFormat(value: CSVFormat): void {
     csvRecord = send_csv_ko;
     csvHeader = "Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Net Worth Amount,Net Worth Currency,Label,Description,TxHash";
     csvSent = "Swap";
+    csvService = csvSent;
     csvReceived = "Income";
     csvMined = "Mining";
   }
@@ -906,8 +910,9 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         console.log("has vin, vout list");
         console.log(voutList);
       }
-      type = csvSent;
       Object.keys(voutList).forEach(outAdr => {
+        type = csvSent;
+        if (getWalletName(outAdr) == 'Flux App Deployment') type = csvService;
         if (outAdr !== myAddress) {
           send_qty = voutList[outAdr];
           send_coin = "FLUX";
