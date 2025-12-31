@@ -24,6 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const startDateInput = document.getElementById('startDate') as HTMLInputElement;
     const endDateInput = document.getElementById('endDate') as HTMLInputElement;
     const watchedInputs = [addressInput, csvFormatSelect, mintSummarySelect, startDateInput, endDateInput];
+    const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.format-tabs .tab'));
+    const tabPanels = Array.from(document.querySelectorAll<HTMLElement>('.format-tabs .tab-panel'));
 
     const disableDownloadBtn = (message?: string) => {
       downloadBtn.disabled = true;
@@ -51,6 +53,20 @@ document.addEventListener('DOMContentLoaded', () => {
       input.addEventListener(eventType, handleInputChange);
     });
 
+    const setActiveTab = (format: string) => {
+      tabButtons.forEach((btn) => {
+        const isActive = btn.dataset.format === format;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        btn.setAttribute('tabindex', isActive ? '0' : '-1');
+      });
+      tabPanels.forEach((panel) => {
+        const isActive = panel.dataset.format === format;
+        panel.classList.toggle('active', isActive);
+        panel.hidden = !isActive;
+      });
+    };
+
     const updateMintSummaryAvailability = () => {
       const isKoinly = csvFormatSelect.value === CSVFormat.Koinly;
       if (!isKoinly) {
@@ -63,7 +79,18 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    csvFormatSelect.addEventListener('change', updateMintSummaryAvailability);
+    csvFormatSelect.addEventListener('change', () => {
+      updateMintSummaryAvailability();
+      setActiveTab(csvFormatSelect.value);
+    });
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const format = btn.dataset.format;
+        if (!format) return;
+        csvFormatSelect.value = format;
+        csvFormatSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
     clearCacheBtn?.addEventListener('click', async () => {
       await clearCaches();
       updateStatusMessage('Cache cleared.');
@@ -88,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialMintSummary = mintSummarySelect.value as keyof typeof MintSummaryPeriod;
     setMintSummary(MintSummaryPeriod[initialMintSummary]);
     updateMintSummaryAvailability();
+    setActiveTab(csvFormatSelect.value);
     updateCacheInfo();
   
     // Handle form submission

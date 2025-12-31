@@ -10,84 +10,120 @@
   <!-- Main Heading -->
   <h1>FluxExport</h1>
   
-  <!-- Form Section -->
-  <div class="container">
-    <h2>Flux Export Tool</h2>
-    <p>This application runs in your browser, no addresses are sent to or stored in the server.</p>
-    <form id="walletForm">
-      <!-- Wallet Address Input -->
-      <label for="address">Wallet Address:</label>
-      <input 
-        type="text" 
-        id="address" 
-        name="address" 
-        placeholder="Enter Wallet Address" 
-        required 
-      />
+  <div class="main-layout">
+    <!-- Form Section -->
+    <div class="container">
+      <h2>Flux Export Tool</h2>
+      <p>This application runs in your browser, no addresses are sent to or stored in the server.</p>
+      <form id="walletForm">
+        <!-- Wallet Address Input -->
+        <label for="address">Wallet Address:</label>
+        <input 
+          type="text" 
+          id="address" 
+          name="address" 
+          placeholder="Enter Wallet Address" 
+          required 
+        />
 
-      <!-- CSV Format Selector -->
-      <label for="csvFormat">CSV Format:</label>
-      <select id="csvFormat" name="csvFormat" required>
-        <option value="CoinLedger">CoinLedger</option>
-        <option value="Koinly" selected>Koinly</option>
-        <option value="CoinTracker">CoinTracker</option>
-      </select>
+        <!-- CSV Format Selector -->
+        <label for="csvFormat">CSV Format:</label>
+        <select id="csvFormat" name="csvFormat" required>
+          <option value="CoinLedger">CoinLedger</option>
+          <option value="Koinly">Koinly</option>
+          <option value="CoinTracker" selected>CoinTracker</option>
+        </select>
 
-      <!-- Mining Summary Selector -->
-      <label for="mintSummary">Mining Summary:</label>
-      <select id="mintSummary" name="mintSummary" required>
-        <option value="None" selected>None</option>
-        <option value="Hourly">Hourly</option>
-        <option value="Daily">Daily</option>
-        <option value="Weekly">Weekly</option>
-        <option value="Monthly">Monthly</option>
-      </select>
+        <!-- Mining Summary Selector -->
+        <label for="mintSummary">Mining Summary:</label>
+        <select id="mintSummary" name="mintSummary" required>
+          <option value="None" selected>None</option>
+          <option value="Hourly">Hourly</option>
+          <option value="Daily">Daily</option>
+          <option value="Weekly">Weekly</option>
+          <option value="Monthly">Monthly</option>
+        </select>
 
-      <!-- Start Date Input -->
-      <label for="startDate">Start Date:</label>
-      <input type="datetime-local" id="startDate" name="startDate" />
-      <p class="field-help">Value saves when selected; click outside the picker to close it.</p>
+        <!-- Start Date Input -->
+        <label for="startDate">Start Date:</label>
+        <input type="datetime-local" id="startDate" name="startDate" />
+        <p class="field-help">Value saves when selected; click outside the picker to close it.</p>
 
-      <!-- End Date Input -->
-      <label for="endDate">End Date:</label>
-      <input type="datetime-local" id="endDate" name="endDate" />
-      <p class="field-help">Value saves when selected; click outside the picker to close it.</p>
+        <!-- End Date Input -->
+        <label for="endDate">End Date:</label>
+        <input type="datetime-local" id="endDate" name="endDate" />
+        <p class="field-help">Value saves when selected; click outside the picker to close it.</p>
 
-      <!-- File Name Input -->
-      <label for="filename">File Name:</label>
-      <input 
-        type="text" 
-        id="filename" 
-        name="filename" 
-        required 
-        placeholder="Enter file name (e.g., wallet_export.csv)" 
-      />
+        <!-- File Name Input -->
+        <label for="filename">File Name:</label>
+        <input 
+          type="text" 
+          id="filename" 
+          name="filename" 
+          required 
+          placeholder="Enter file name (e.g., wallet_export.csv)" 
+        />
 
-      <!-- Submit Button -->
-      <button type="submit">Get Wallet</button>
-    </form>
+        <!-- Submit Button -->
+        <button type="submit">Get Wallet</button>
+      </form>
 
-    <!-- Status Message -->
-    <div id="statusMessage" aria-live="polite">
-      <p id="status">Waiting for updates...</p>
+      <!-- Status Message -->
+      <div id="statusMessage" aria-live="polite">
+        <p id="status">Waiting for updates...</p>
+      </div>
+
+      <div class="actions-row">
+        <div class="actions-left">
+          <button id="downloadBtn" disabled aria-disabled="true">Download CSV</button>
+          <p id="downloadNotice" class="field-help" role="status" aria-live="polite"></p>
+        </div>
+        <div class="actions-right">
+          <button id="clearCacheBtn" type="button">Clear Cache</button>
+          <p id="cacheInfo" aria-live="polite"></p>
+        </div>
+      </div>
     </div>
 
-    <!-- Download Button -->
-    <button id="downloadBtn" disabled aria-disabled="true">Download CSV</button>
-    <p id="downloadNotice" class="field-help" role="status" aria-live="polite"></p>
+    <section class="donations">
+      <div class="format-tabs" aria-label="CSV format tips">
+        <div class="tab-list" role="tablist">
+          <button type="button" role="tab" aria-selected="false" class="tab" data-format="CoinTracker">Coin Tracker</button>
+          <button type="button" role="tab" aria-selected="false" class="tab" data-format="CoinLedger">Coin Ledger</button>
+          <button type="button" role="tab" aria-selected="false" class="tab" data-format="Koinly">Koinly</button>
+        </div>
+        <div class="tab-panels">
+          <div class="tab-panel" role="tabpanel" data-format="CoinTracker">
+            <p>This is the format I use for my accounts and the primary reason is that it can handle Flux Node Rewards
+              without adding to the Subscription Transaction count.</p>
+            <p>All of the formats will create duplicate transactions if you import any transactions that are already imported</p>
+            <p>If you import a partial year you need to make sure there is no overlap in transaction times.</p>
+            <p>You can only import a single wallet address at a time and
+              a transfer between two wallets will show up as a send out of one wallet and the receive into a different wallet.
+              If both of these wallets are controlled by you then once both wallets have been updated (synced) you must
+              use the CoinTracker Transaction page to link the send and receive together as a 'Transfer' to make it
+              non-taxable internal wallet transfer event.
+            </p>
+            <p>The same actions are needed for Flux Parallel Asset (PA) swaps, you can link between the PA Wallet Flux Token and
+               Flux blockchain and create a 'Bridge' transfer, again non-tabable.
+            </p>
+          </div>
+          <div class="tab-panel" role="tabpanel" data-format="CoinLedger">
+            <p>CoinLedger-specific guidance goes here. Add any tips or reminders for this format.</p>
+          </div>
+          <div class="tab-panel" role="tabpanel" data-format="Koinly">
+            <p>Koinly-specific guidance goes here. Add any tips or reminders for this format.</p>
+          </div>
+        </div>
+      </div>
+      <h3>Donations</h3>
+      <p>Donations are very much appreciated.</p>
+      <p> Please consider donating to keep the website development going.</p>
+      <p><strong>Flux Address:</strong> t3hfSzkcsgJraindYiu7U8GNW7EhNS19x3c</p>
+      <p class="btc-address"><strong>BTC Address:</strong> bc1qhdj3e0rffsqmvsyztxdf53j729gaplf2sw24qjdqqu9axflkfugs6mlxyj</p>
+      <div class="cache-controls"></div>
+    </section>
   </div>
-
-  <section class="donations">
-    <h3>Donations</h3>
-    <p>Donations are very much appreciated.</p>
-    <p> Please consider donating to keep the website development going.</p>
-    <p><strong>Flux Address:</strong> t3hfSzkcsgJraindYiu7U8GNW7EhNS19x3c</p>
-    <p><strong>BTC Address:</strong> bc1qhdj3e0rffsqmvsyztxdf53j729gaplf2sw24qjdqqu9axflkfugs6mlxyj</p>
-    <div class="cache-controls">
-      <button id="clearCacheBtn" type="button">Clear Cache</button>
-      <p id="cacheInfo" aria-live="polite"></p>
-    </div>
-  </section>
 
   <!-- Script -->
   <script type="module" src="script.js"></script>
