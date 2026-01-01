@@ -128,6 +128,7 @@ var csvRecord: any;
 let csvSent: string = "SENT";
 let csvService: string = csvSent;
 let csvReceived: string = "RECEIVED";
+let csvBridge: string = csvReceived;
 let csvMined: string = "MINED";
 let mintSummary: MintSummaryPeriod = MintSummaryPeriod.None;
 
@@ -555,6 +556,7 @@ export function setCsvFormat(value: CSVFormat): void {
     csvHeader = "Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag";
     csvSent = "";
     csvReceived = "payment";
+    csvBridge = "bridge";
     csvService = "Service";
     csvMined = "Staking";
   }
@@ -905,6 +907,9 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
       msg = msg + getWalletName(inAdr) + " ";
     });
     if (single) console.log(`Sender ${send_adr} ${msg}`);
+    const swapPoolSender: boolean =
+      getWalletName(send_adr) === 'Flux Swap Pool Hot' ||
+      Object.keys(vinsum).some((adr) => getWalletName(adr) === 'Flux Swap Pool Hot');
     if (hasVin) {
       if (single) {
         console.log("has vin, vout list");
@@ -913,6 +918,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
       Object.keys(voutList).forEach(outAdr => {
         type = csvSent;
         if (getWalletName(outAdr) == 'Flux App Deployment') type = csvService;
+        if (getWalletName(outAdr) == 'Flux Swap Pool Hot') type = csvBridge;
         if (outAdr !== myAddress) {
           send_qty = voutList[outAdr];
           send_coin = "FLUX";
@@ -920,7 +926,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           send_comment = `Address: ${getWalletName(outAdr)}`;
           gas_coin = "FLUX";
           gas_usd = (gas_fee as number) * coin_value/100000000;
-          console.log(`send_usd ${send_usd} gas ${gas_usd}`);
+          console.log(`send_usd ${send_usd} gas ${gas_usd} ${type} swap ${swapPoolSender}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
             send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
           gas_fee = 0;
@@ -931,15 +937,18 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         console.log("vout list");
         console.log(voutList);
       }
-      type = csvReceived;
       Object.keys(voutList).forEach(outAdr => {
+        type = swapPoolSender ? csvBridge : csvReceived;
+        console.log(`recv ${swapPoolSender} is ${send_adr} ${type}`);
+        if (single) console.log(`recv ${getWalletName(send_adr)} is ${send_adr} ${type}`);
         if (outAdr === myAddress) {
           recv_qty = voutList[outAdr];
+          console.log(`recv ${send_adr} => ${outAdr} ${type} ${recv_qty}`)
           recv_coin = "FLUX";
           recv_usd = recv_qty * coin_value/100000000;
           recv_comment = msg;
           gas_fee = ''; // No fee to  receive
-          console.log(`${recv_qty} ${coin_value} ${recv_coin} usd ${recv_usd}`);
+          console.log(`recv ${recv_qty} ${coin_value} ${recv_coin} usd ${recv_usd} ${type}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
             send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
         }
