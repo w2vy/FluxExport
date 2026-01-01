@@ -93,15 +93,146 @@
           <button type="button" role="tab" aria-selected="false" class="tab" data-format="Koinly">Koinly</button>
         </div>
         <div class="tab-panels">
-          <div class="tab-panel" role="tabpanel" data-format="CoinTracker">
-            <p>I found the Coin Tracker features useful and cost saving that this is the one I use!</p>
+          <div class="tab-panel scroll-panel" role="tabpanel" data-format="CoinTracker">
+            <p>Coin Tracker manu useful features and it is the one I use for my own crypto!</p>
             <ul class="bullet-list">
               <li>Handles Flux Node Rewards without counting them against your subscription’s transaction limit.</li>
               <li>Avoid overlapping date ranges; partial-year imports that overlap will create duplicates.</li>
               <li>Import one wallet at a time. For transfers between your own wallets, link the outgoing and incoming entries as a “Transfer” in CoinTracker to mark them non-taxable.</li>
               <li>For Flux Parallel Asset swaps, link the PA wallet token entry and the Flux chain entry as a “Bridge” transfer to keep it non-taxable.</li>
+              <li>Payments for renewing any Flux Applications you have deployed will be marked as Service fees.</li>
             </ul>
             <p class="bonus-note">BONUS: New Accoints Receive 20% Discount!<br>Sign up here: <a href="https://cointracker.cello.so/cOM1jhoGB7D" target="_blank" rel="noopener noreferrer">https://cointracker.cello.so/cOM1jhoGB7D</a><br>I receive a referral bonus after 30 days (the refund period).</p>
+            <h4 class="demo-heading">Step By Step Demo</h4>
+            <ul class="demo-steps">
+              <li>
+                <p>First add any exchanges you have. Here I have Binance.us (via API) and Crypto.com App (via csv import). I also limited the display to 12/22 to 12/25 for this demo.</p>
+                <a href="images/CT_Demo_1-Exchanges.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_1-Exchanges.png" alt="CoinTracker step 1: add exchanges">
+                </a>
+              </li>
+              <li>
+                <p>Export your Flux Wallets with FluxExport setting the date range and a different file name for each wallet.</p>
+              </li>
+              <li>
+                <p>Import your Flux Wallets.</p>
+                <a href="images/CT_Demo_2-ImportWallet.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_2-ImportWallet.png" alt="CoinTracker step 2: import FluxExport wallets">
+                </a>
+                <p>Always review your transactions after an import there are some small changes that may be needed.</p>
+                <p>If your wallets include node rewards you will see 'Staking Reward' transactions, likely *many* of them.
+                  You can hide them with the HIDE option in the upper right corner of the transaction page.
+                </p>
+              </li>
+              <li>
+                <p>Here are examples of transactions that need attention. We will be Linking pairs of transactions
+                  in order to allow for proper tracking of the cost basis of Flux to Flux transfers, including PA swaps.
+                  These are only done for wallets you own both sides of.
+                </p>
+                <a href="images/CT_Demo_3-RawTransactions.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_3-RawTransactions.png" alt="CoinTracker step 3: review transactions">
+                </a>
+              </li>
+              <li>
+                <p>Let's start from the top down! The first thing we see is a wallet to waller transfer between my own wallets.
+                  In this case I was actually locking up node collateral, but that does not really matter to the IRS.
+                </p>
+                <p>Select the send and payment. (In Coin Tracker a Payment is a payment you received) You click the check box of each
+                  and then click 'Link Trasnactions' on the control bar.
+                </p>
+                <a href="images/CT_Demo_4-FluxTransfer.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_4-FluxTransfer.png" alt="CoinTracker step 4: Flux Transfer">
+                </a>
+              </li>
+              <li>
+                <p>Set the type of link. We use Bridge for Swapping between PA (ie Flux and Flux-BSC) and Transfer for same asset type
+                  such as Flux to Flux or Flux-BSC to Flux-BSC.
+                </p>
+                <a href="images/CT_Demo_5-LinkTransfer.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_5-LinkTransfer.png" alt="CoinTracker step 5: Set Link type">
+                </a>
+              </li>
+              <li>
+                <p>Now the transfer is linked and it is not a taxable event. There are two other transfers I updated.</p>
+                <a href="images/CT_Demo_6-Linked.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_6-Linked.png" alt="CoinTracker step 6: linked">
+                </a>
+              </li>
+              <li>
+                <p>Now we have a Flux-BSC to Flux Swap. The fees need to be checked and updated.
+                  You see the difference between the send and receive is 15 Flux, we will add this to the sending transaction.</p>
+                <a href="images/CT_Demo_7-FLUX-BSC_Swap.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_7-FLUX-BSC_Swap.png" alt="CoinTracker step 7: Examine Flux Swap">
+                </a>
+              </li>
+              <li>
+                <p>Click the dots on the right end of the Send transaction, below the 'Change Category' it says 'Edit Transaction' select that.</p>
+                <a href="images/CT_Demo_8-EditBridgeIn.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_8-EditBridgeIn.png" alt="CoinTracker step 1: explain">
+                </a>
+              </li>
+              <li>
+                <p>Edit Transaction. We need to add 15 Flux to the transaction fees.</p>
+                <a href="images/CT_Demo_9-EditTransaction.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_9-EditTransaction.png" alt="CoinTracker step 9: edit transaction">
+                </a>
+                <p>Click the Add under Transaction fees and add 15 Flux.</p>
+                <a href="images/CT_Demo_10-AddTransactionFee.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_10-AddTransactionFee.png" alt="CoinTracker step 9: edit transaction">
+                </a>
+              </li>
+              <li>
+                <p>The updated transaction should look like this. If it looks ok click Save.</p>
+                <a href="images/CT_Demo_10-AddedTransactionFee.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_10-AddedTransactionFee.png" alt="CoinTracker step 1: review update">
+                </a>
+              </li>
+              <li>
+                <p>If you click the transaction it will expand to show all the details.
+                  Here we can review both sides before we link them.</p>
+                <a href="images/CT_Demo_11-FinalSwapBalanced.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_11-FinalSwapBalanced.png" alt="CoinTracker step 1: explain">
+                </a>
+              </li>
+              <li>
+                <p>Now we link just like before with the Flux Transfers</p>
+                <a href="images/CT_Demo_12-LinkFusionSwap.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_12-LinkFusionSwap.png" alt="CoinTracker step 1: explain">
+                </a>
+                <p>But this time it is a Bridge Transfer since they are on different chains.</p>
+                <a href="images/CT_Demo_13-LinkBridge.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_13-LinkBridge.png" alt="CoinTracker step 1: explain">
+                </a>
+              </li>
+              <li>
+                <p>Now we can examine the details as a single transaction, again non-taxable.</p>
+                <a href="images/CT_Demo_14-BridgeDetails.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_14-BridgeDetails.png" alt="CoinTracker step 1: explain">
+                </a>
+              </li>
+              <li>
+                <p>With the Flux-ETH swap the process is the same, but the fees look different.</p>
+                <a href="images/CT_Demo_15-AddSwapFee.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_15-AddSwapFee.png" alt="CoinTracker step 1: explain">
+                </a>
+              </li>
+              <li>
+                <p>Take the same steps to Link and mark the transaction as a Bridge.</p>
+                <a href="images/CT_Demo_16-BridgeDetails.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_16-BridgeDetails.png" alt="CoinTracker step 1: explain">
+                </a>
+              </li>
+              <li>
+                <p>All Done!</p>
+                <a href="images/CT_Demo_17-AllDone.png" target="_blank" rel="noopener noreferrer">
+                  <img src="images/CT_Demo_17-AllDone.png" alt="CoinTracker step 1: explain">
+                </a>
+              </li>
+              <li>
+                <p>There may be other transactions we need to look at.
+                  If you have any questions ask me on the Flux Discord.</p>
+              </li>
+            </ul>
           </div>
           <div class="tab-panel" role="tabpanel" data-format="CoinLedger">
             <p>CoinLedger-specific guidance goes here. Add any tips or reminders for this format.</p>
@@ -126,7 +257,7 @@
   <script type="module" src="script.js"></script>
 
   <footer>
-    <p>FluxExport ver __APP_VERSION__ &copy; 2025 Thomas A. Moulton, W2VY. All rights reserved.</p>
+    <p>FluxExport ver __APP_VERSION__ &copy; 2026 Thomas A. Moulton, W2VY. All rights reserved.</p>
     <p>Support: Discord RunOnFlux @w2vy</p>
   </footer>
 </body>

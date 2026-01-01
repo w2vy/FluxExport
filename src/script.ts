@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const watchedInputs = [addressInput, csvFormatSelect, mintSummarySelect, startDateInput, endDateInput];
     const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.format-tabs .tab'));
     const tabPanels = Array.from(document.querySelectorAll<HTMLElement>('.format-tabs .tab-panel'));
+    const demoLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.demo-steps a'));
 
     const disableDownloadBtn = (message?: string) => {
       downloadBtn.disabled = true;
@@ -91,6 +92,49 @@ document.addEventListener('DOMContentLoaded', () => {
         csvFormatSelect.dispatchEvent(new Event('change', { bubbles: true }));
       });
     });
+
+    // Simple lightbox for demo images
+    const lightbox = document.createElement('div');
+    lightbox.className = 'image-lightbox';
+    const lightboxImg = document.createElement('img');
+    lightbox.appendChild(lightboxImg);
+    let lightboxActive = false;
+
+    const closeLightbox = () => {
+      if (!lightboxActive) return;
+      lightbox.classList.remove('visible');
+      setTimeout(() => {
+        if (lightbox.parentElement) lightbox.parentElement.removeChild(lightbox);
+      }, 140);
+      lightboxActive = false;
+      document.removeEventListener('keydown', handleEscape);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeLightbox();
+    };
+
+    lightbox.addEventListener('click', closeLightbox);
+
+    const openLightbox = (src: string, alt?: string) => {
+      lightboxImg.src = src;
+      lightboxImg.alt = alt ?? '';
+      if (!lightbox.parentElement) document.body.appendChild(lightbox);
+      requestAnimationFrame(() => lightbox.classList.add('visible'));
+      lightboxActive = true;
+      document.addEventListener('keydown', handleEscape);
+    };
+
+    demoLinks.forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const img = link.querySelector('img');
+        const src = link.getAttribute('href') || img?.src;
+        if (!src) return;
+        openLightbox(src, img?.alt ?? '');
+      });
+    });
+
     clearCacheBtn?.addEventListener('click', async () => {
       await clearCaches();
       updateStatusMessage('Cache cleared.');
