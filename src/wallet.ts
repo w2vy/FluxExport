@@ -335,7 +335,6 @@ function flushMintSummaryUpTo(cutoff: number, data: string[]): void {
         "",
         mintState.recvUsd,
         "USD",
-        "",
         ""
       ));
     }
@@ -384,7 +383,6 @@ function finalizeMintSummary(data: string[]): void {
       "",
       mintState.recvUsd,
       "USD",
-      "",
       ""
     ));
   }
@@ -566,7 +564,7 @@ function isValidTxid(txid: string): boolean {
 
 function send_csv_ct(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any,
-  send_coin: string, send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
+  send_coin: string, send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string
 ): string {
   const date:string = formatTimestamp(dateTime, true);
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
@@ -580,7 +578,7 @@ function send_csv_ct(
 
 function send_csv_cl(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string,
-  send_comment: string, gas_fee: string | number, gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
+  send_comment: string, gas_fee: string | number, gas_coin: string, net_usd: string | number, currency: string, txid: string
 ): string {
   const date:string = formatTimestamp(dateTime, true);
   if (tag == csvSent) {
@@ -603,14 +601,14 @@ function send_csv_cl(
     if (send_comment.length > 0) comment = comment + ", " + send_comment;
   } else comment = send_comment;
   const csvRow = [
-    date, "", send_coin, send_qty, recv_coin, recv_qty, gas_coin, gas_fee, tag, comment, hash
+    date, "", send_coin, send_qty, recv_coin, recv_qty, gas_coin, gas_fee, tag, comment, txid
   ].join(",");
   return csvRow;
 }
 
 function send_csv_ko(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string,
-  send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
+  send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string
 ): string {
   const date:string = formatTimestampKO(dateTime); // UTC format needed
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
@@ -624,7 +622,7 @@ function send_csv_ko(
     if (send_comment.length > 0) comment = comment + ", " + send_comment;
   } else comment = send_comment;
   const csvRow = [
-    date, send_qty, send_coin, recv_qty, recv_coin, gas_fee, gas_coin, net_usd, currency, tag, comment, hash
+    date, send_qty, send_coin, recv_qty, recv_coin, gas_fee, gas_coin, net_usd, currency, tag, comment, txid
   ].join(",");
   return csvRow;
 }
@@ -676,7 +674,6 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
   const dateTime: number = txn.data.time;
   var coin_value: number;
   const txid: string = txn.data.txid
-  const hash: string = txn.data.blockhash;
 
   if (txn.data.vin !== undefined) {
     txn.data.vin.forEach(vin => {
@@ -745,7 +742,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     console.log(`usd gas ${gas_usd}`);
     if (gas_fee > 0) { // if qty and gas 0, nothing to see here
       data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-        send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
+        send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid));
     }
   } else if (mined) {
     if (single) console.log("Mined");
@@ -758,7 +755,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     gas_usd = 0;
     if (mintSummary === MintSummaryPeriod.None) {
       data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-        send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
+        send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid));
     } else {
       addMintRecord(dateTime, recv_qty as number, recv_usd as number, data);
     }
@@ -799,7 +796,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           gas_usd = (gas_fee as number) * coin_value/100000000;
           console.log(`send_usd ${send_usd} gas ${gas_usd} ${type} swap ${swapPoolSender}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-            send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
+            send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid));
           gas_fee = 0;
         }
       });
@@ -821,7 +818,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           gas_fee = ''; // No fee to  receive
           console.log(`recv ${recv_qty} ${coin_value} ${recv_coin} usd ${recv_usd} ${type}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-            send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
+            send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid));
         }
       });
     } else {

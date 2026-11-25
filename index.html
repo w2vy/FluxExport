@@ -296,11 +296,13 @@
           </div>
           <div class="tab-panel" role="tabpanel" data-format="CoinLedger">
             <p>Node rewards are exported as Mining, other FLUX received as Income, and FLUX sent as Merchant Payment. Review the types after importing.</p>
+            <p>Parallel Asset swaps, and transfers between your own saved wallets, are exported as Deposit and Withdrawal, which CoinLedger does not tax. For a swap, merge the two sides into a Bridge in CoinLedger.</p>
           </div>
           <div class="tab-panel" role="tabpanel" data-format="Koinly">
             <p>This format includes the net worth of each transaction and this tool uses hourly price data to calculate it.</p>
             <p>This format allows collecting node rewards and providing Hourly, Daily, Weekly or Monthly transactions.
                The summary transactions include the sum of the net worth of each reward.</p>
+            <p>Parallel Asset swaps, and transfers between your own saved wallets, are exported without a label. Check that Koinly matched the two sides as a transfer.</p>
           </div>
         </div>
       </div>
