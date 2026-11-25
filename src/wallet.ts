@@ -511,16 +511,10 @@ export async function getwallet(updateStatus: (message: string) => void): Promis
   if (responseData) {
     console.log(`getwallet: Start ${startDate} End ${endDate}`);
     const { data, rows } = await scanWalletData(updateStatus, responseData, Address);
-    if (rows == 0 && data.length == 1) updateStatus(data[0]);
-    else updateStatus(`Wallet Scan complete, ${rows} transactions found`);
+    updateStatus(`Wallet Scan complete, ${rows} transactions found`);
     return { data, rows };
-  } else {
-    console.log("Failed to retrieve data.");
   }
-
-  const data: string[]= ["Failed to retrieve data."];
-  const rows:number = 0;
-  return {data, rows}
+  throw new Error("The Flux API did not answer. Nothing was exported. Try again in a few minutes.");
 }
 
 async function fetchWebPageData(url: string): Promise<string | null> {
@@ -831,11 +825,9 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
     let numtxn : number = 0;
     resetMintSummary();
     startPriceRun();
-    if (!TXNs || !TXNs.data) {
+    if (!TXNs || !Array.isArray(TXNs.data)) {
       console.log(responseData);
-      console.error("Invalid response structure.");
-      data.push("Invalid response structure.");
-      return {data, rows};
+      throw new Error("the Flux API did not return a list of transactions");
     }
 
     if (TXNs.data.length === 0) {
@@ -854,6 +846,12 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
 
     txns[start] = await fetchTransaction(txids[start].txid)
     txns[finish] = await fetchTransaction(txids[finish].txid)
+    if ((endDate != 0 && txns[start].data.time > endDate) || (startDate != 0 && txns[finish].data.time < startDate)) {
+      // The wallet has nothing in this date range, no need to read every transaction
+      data.push(csvHeader);
+      rows = rows + 1;
+      return { data, rows };
+    }
     if (startDate != 0 && txids.length > 10) {
       let done: boolean = false;
       let nstart: number = start;
@@ -926,8 +924,7 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
   } catch (error) {
     if (error instanceof MissingPriceError) throw error;
     console.error("Error parsing or processing wallet data:", error);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Unable to read this wallet: ${reason}. Nothing was exported.`);
   }
-  const data:string[] = ["Error parsing or processing wallet data"];
-  const rows:number = 0;
-  return {data, rows};
 }
