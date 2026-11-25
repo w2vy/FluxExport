@@ -1,7 +1,8 @@
-import { getwallet, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate, setMintSummary, MintSummaryPeriod, clearCaches, getCacheStats } from './wallet.js';
-import { Settings, SavedAddress, loadSettings, saveSettings, settingsText, parseSettings, walletNames, addressesOf, formatFor, usesKoinly, putAddress, removeAddress, renameWallet, setDefaultFormat, setWalletFormat, companies, setWalletCompany, isFluxAddress, suggestFileName } from './config.js';
+import { getwallet, setAddress, setOwnAddresses, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate, setMintSummary, MintSummaryPeriod, clearCaches, getCacheStats } from './wallet.js';
+import { Settings, SavedAddress, loadSettings, saveSettings, settingsText, parseSettings, walletNames, addressesOf, formatFor, usesKoinly, putAddress, removeAddress, renameWallet, setDefaultFormat, setWalletFormat, companies, setWalletCompany, ownAddressesOf, isFluxAddress, suggestFileName } from './config.js';
 
 const OTHER_ADDRESS = 'other';
+const ALL_ADDRESSES = 'all';
 const DAY_IN_SECONDS = 24 * 60 * 60;
 
 function validateFileName(fileName: string): boolean {
@@ -35,7 +36,7 @@ function today(): string {
 
 document.addEventListener('DOMContentLoaded', () => {
   let settings: Settings = loadSettings();
-  let csvDownloadData = '';
+  let files: { name: string; text: string }[] = []; // ready to download
   let fileNameEdited = false;
   let editingId = '';
   let scanning = false;
@@ -50,6 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const startDateInput = byId<HTMLInputElement>('startDate');
   const endDateInput = byId<HTMLInputElement>('endDate');
   const yearButtons = byId<HTMLElement>('yearButtons');
+  const fileNameRow = byId<HTMLElement>('fileNameRow');
+  const fileList = byId<HTMLElement>('fileList');
   const fileNameInput = byId<HTMLInputElement>('filename');
   const status = byId<HTMLParagraphElement>('status');
   const downloadBtn = byId<HTMLButtonElement>('downloadBtn');
@@ -123,7 +126,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectedAddress = (): string => selectedWallet()?.address ?? addressInput.value.trim();
 
   const clearDownload = (message: string) => {
-    csvDownloadData = '';
+    files = [];
+    fileList.textContent = '';
+    downloadBtn.textContent = 'Download CSV';
     downloadBtn.disabled = true;
     downloadBtn.setAttribute('aria-disabled', 'true');
     downloadNotice.textContent = message;
@@ -132,12 +137,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const enableDownload = () => {
     downloadBtn.disabled = false;
     downloadBtn.setAttribute('aria-disabled', 'false');
-    downloadNotice.textContent = 'Download ready. Click the button to save your CSV.';
+    downloadBtn.textContent = files.length > 1 ? `Download ${files.length} CSVs` : 'Download CSV';
+    downloadNotice.textContent = files.length > 1
+      ? 'Download ready. Your browser may ask to allow more than one file.'
+      : 'Download ready. Click the button to save your CSV.';
   };
 
   // The export on hand no longer matches the inputs
   const inputsChanged = () => {
-    if (csvDownloadData === '') return;
+    if (files.length === 0 && !fileList.hasChildNodes()) return;
     clearDownload('Inputs changed. Run "Get Wallet" again to enable the download.');
     updateStatusMessage('Inputs changed. Run "Get Wallet" to refresh.');
   };
@@ -149,10 +157,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const refreshExport = () => {
     const wallet = selectedWallet();
-    const isOther = wallet === null;
+    const isAll = walletSelect.value === ALL_ADDRESSES;
+    const isOther = wallet === null && !isAll;
+    fileNameRow.hidden = isAll;
     addressRow.hidden = !isOther;
     addressInput.required = isOther;
 
+    if (isAll) {
+      formatLine.textContent = 'One CSV for each saved address, in the format of its wallet.';
+      showTips(settings.csvFormat);
+      return;
+    }
     const format = formatFor(settings, wallet);
     const parts = [`CSV format: ${format}`];
     if (format === CSVFormat.Koinly) parts.push(`Mining summary: ${settings.mintSummary}`);
@@ -170,10 +185,11 @@ document.addEventListener('DOMContentLoaded', () => {
       addressesOf(settings, wallet).forEach(saved => addOption(group, saved.id, saved.name));
       walletSelect.appendChild(group);
     });
+    if (settings.addresses.length > 1) addOption(walletSelect, ALL_ADDRESSES, `All addresses (${settings.addresses.length})`);
     addOption(walletSelect, OTHER_ADDRESS, 'Other address…');
     walletRow.hidden = settings.addresses.length === 0;
     if (settings.addresses.length === 0) walletSelect.value = OTHER_ADDRESS;
-    else if (settings.addresses.some(saved => saved.id === previous)) walletSelect.value = previous;
+    else if (Array.from(walletSelect.options).some(option => option.value === previous) && previous !== OTHER_ADDRESS) walletSelect.value = previous;
     else walletSelect.selectedIndex = 0;
   };
 
@@ -225,40 +241,26 @@ document.addEventListener('DOMContentLoaded', () => {
     updateCacheInfo();
   });
 
-  byId('walletForm').addEventListener('submit', async event => {
-    event.preventDefault();
-    if (scanning) return;
-    const address = selectedAddress();
-    const start = startDateInput.value;
-    const end = endDateInput.value;
-
-    clearDownload('');
-    if (!isFluxAddress(address)) {
-      updateStatusMessage('Enter a Flux address: t1 or t3 and 35 characters in all.');
-      return;
-    }
-    if (start && end && start > end) {
-      updateStatusMessage('The start date is after the end date.');
-      return;
-    }
-    refreshFileName();
-    if (!validateFileName(fileNameInput.value.trim())) {
-      updateStatusMessage('The file name must end with .csv and use only letters, numbers, underscores and hyphens.');
-      return;
-    }
-
+  const readAddress = (address: string, saved: SavedAddress | null, start: string, end: string, onStatus: (message: string) => void) => {
+    const format = formatFor(settings, saved);
     setAddress(address);
-    setCsvFormat(formatFor(settings, selectedWallet()));
-    setMintSummary(formatFor(settings, selectedWallet()) === CSVFormat.Koinly ? settings.mintSummary : MintSummaryPeriod.None);
+    setOwnAddresses(ownAddressesOf(settings, address));
+    setCsvFormat(format);
+    setMintSummary(format === CSVFormat.Koinly ? settings.mintSummary : MintSummaryPeriod.None);
     setStartDate(start ? parseDateToEpoch(start) : 0);
     setEndDate(end ? parseDateToEpoch(end) + DAY_IN_SECONDS - 1 : 0); // the whole end day
+    return getwallet(onStatus);
+  };
 
-    setScanning(true);
-    updateStatusMessage('Reading the wallet...');
+  const csvText = (data: string[]): string => data.map(row => row + '\n').join('');
+
+  const errorText = (error: unknown): string => error instanceof Error ? error.message : 'Unable to read this wallet. Nothing was exported.';
+
+  const exportOne = async (address: string, start: string, end: string) => {
     try {
-      const { data, rows } = await getwallet(updateStatusMessage);
+      const { data, rows } = await readAddress(address, selectedWallet(), start, end, updateStatusMessage);
       if (rows > 1) {
-        csvDownloadData = data.map(row => row + '\n').join('');
+        files = [{ name: '', text: csvText(data) }]; // saved under the name in the form
         enableDownload();
         updateStatusMessage(`Ready for download: ${rows - 1} rows`);
       } else {
@@ -268,22 +270,117 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       console.error('Error while fetching wallet:', error);
       clearDownload('Export failed, no file to download.');
-      updateStatusMessage(error instanceof Error ? error.message : 'Unable to read this wallet. Nothing was exported.');
+      updateStatusMessage(errorText(error));
+    }
+  };
+
+  const smallButton = (text: string, label: string, onClick: () => void): HTMLButtonElement => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'small-btn';
+    button.textContent = text;
+    button.setAttribute('aria-label', label);
+    button.addEventListener('click', onClick);
+    return button;
+  };
+
+  const addFileLine = (text: string, file?: { name: string; text: string }) => {
+    const row = document.createElement('div');
+    row.className = 'wallet-row';
+    const label = document.createElement('div');
+    label.className = 'wallet-text';
+    label.textContent = text;
+    row.append(label);
+    if (file) row.append(smallButton('Save', `Save ${file.name}`, () => saveFile(file.text, 'text/csv', file.name)));
+    fileList.appendChild(row);
+  };
+
+  const exportAll = async (start: string, end: string) => {
+    const all = walletNames(settings).flatMap(wallet => addressesOf(settings, wallet));
+    const taken = new Set<string>();
+    let failed = 0;
+    for (let index = 0; index < all.length; index++) {
+      const saved = all[index];
+      const title = `${saved.wallet}: ${saved.name}`;
+      const progress = (message: string) => updateStatusMessage(`${index + 1} of ${all.length}, ${title}. ${message}`);
+      progress('Reading the wallet...');
+      try {
+        const { data, rows } = await readAddress(saved.address, saved, start, end, progress);
+        if (rows <= 1) {
+          addFileLine(`${title}: no transactions`);
+          continue;
+        }
+        const wanted = suggestFileName(saved, saved.address, start, end, today());
+        let name = wanted;
+        for (let copy = 2; taken.has(name.toLowerCase()); copy++) name = wanted.replace(/\.csv$/, `-${copy}.csv`);
+        taken.add(name.toLowerCase());
+        const file = { name, text: csvText(data) };
+        files.push(file);
+        addFileLine(`${title}: ${rows - 1} rows`, file);
+      } catch (error) {
+        console.error('Error while fetching wallet:', error);
+        failed++;
+        addFileLine(`${title}: FAILED. ${errorText(error)}`);
+      }
+    }
+    const problem = failed > 0 ? ` ${failed} of ${all.length} addresses failed, see the list.` : '';
+    if (files.length > 0) enableDownload();
+    else downloadNotice.textContent = 'No file to download.';
+    updateStatusMessage(files.length > 0 ? `Ready for download: ${files.length} ${files.length === 1 ? 'file' : 'files'}.${problem}` : `No transactions found.${problem}`);
+  };
+
+  byId('walletForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (scanning) return;
+    const isAll = walletSelect.value === ALL_ADDRESSES;
+    const address = selectedAddress();
+    const start = startDateInput.value;
+    const end = endDateInput.value;
+
+    clearDownload('');
+    if (!isAll && !isFluxAddress(address)) {
+      updateStatusMessage('Enter a Flux address: t1 or t3 and 35 characters in all.');
+      return;
+    }
+    if (start && end && start > end) {
+      updateStatusMessage('The start date is after the end date.');
+      return;
+    }
+    refreshFileName();
+    if (!isAll && !validateFileName(fileNameInput.value.trim())) {
+      updateStatusMessage('The file name must end with .csv and use only letters, numbers, underscores and hyphens.');
+      return;
+    }
+
+    setScanning(true);
+    updateStatusMessage('Reading the wallet...');
+    try {
+      if (isAll) await exportAll(start, end);
+      else await exportOne(address, start, end);
     } finally {
       setScanning(false);
       updateCacheInfo();
     }
   });
 
-  downloadBtn.addEventListener('click', () => {
-    if (csvDownloadData === '') return;
+  downloadBtn.addEventListener('click', async () => {
+    if (files.length === 0) return;
+    if (walletSelect.value === ALL_ADDRESSES) {
+      const count = files.length;
+      for (const file of files.slice()) {
+        saveFile(file.text, 'text/csv', file.name);
+        await new Promise(resolve => setTimeout(resolve, 300)); // browsers drop downloads started together
+      }
+      downloadNotice.textContent = `Saved ${count} ${count === 1 ? 'file' : 'files'}. Use Save in the list for one that is missing.`;
+      return;
+    }
     const fileName = fileNameInput.value.trim();
     if (!validateFileName(fileName)) {
       downloadNotice.textContent = 'The file name must end with .csv and use only letters, numbers, underscores and hyphens.';
       return;
     }
     downloadNotice.textContent = `Saved as ${fileName}. Click the button to save it again.`;
-    saveFile(csvDownloadData, 'text/csv', fileName);
+    saveFile(files[0].text, 'text/csv', fileName);
   });
 
   // ---- Configuration ----
@@ -312,16 +409,6 @@ document.addEventListener('DOMContentLoaded', () => {
     walletAddress.value = '';
     walletSaveBtn.textContent = 'Add address';
     walletCancelBtn.hidden = true;
-  };
-
-  const smallButton = (text: string, label: string, onClick: () => void): HTMLButtonElement => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'small-btn';
-    button.textContent = text;
-    button.setAttribute('aria-label', label);
-    button.addEventListener('click', onClick);
-    return button;
   };
 
   const addressRowFor = (saved: SavedAddress): HTMLElement => {

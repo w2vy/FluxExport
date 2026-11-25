@@ -125,9 +125,13 @@ var csvRecord: any;
 let csvSent: string = "SENT";
 let csvService: string = csvSent;
 let csvReceived: string = "RECEIVED";
-let csvBridge: string = csvReceived;
+let csvBridgeIn: string = csvReceived;
+let csvBridgeOut: string = csvSent;
+let csvTransferIn: string = csvReceived; // from and to the owner's other addresses
+let csvTransferOut: string = csvSent;
 let csvMined: string = "MINED";
 let mintSummary: MintSummaryPeriod = MintSummaryPeriod.None;
+let ownAddresses: Set<string> = new Set();
 
 // Well known Flux Wallets
 
@@ -396,6 +400,11 @@ export function setAddress(value: string): void {
   Address = value;
 }
 
+/** The addresses with the same owner as the one exported. */
+export function setOwnAddresses(addresses: string[]): void {
+  ownAddresses = new Set(addresses);
+}
+
 export function setTestTxid(value: string): void {
   testTxid = value;
 }
@@ -407,7 +416,10 @@ export function setCsvFormat(value: CSVFormat): void {
     csvHeader = "Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag";
     csvSent = "";
     csvReceived = "payment";
-    csvBridge = "bridge";
+    csvBridgeIn = "bridge";
+    csvBridgeOut = csvBridgeIn;
+    csvTransferIn = "";
+    csvTransferOut = "";
     csvService = "Service";
     csvMined = "staking";
   }
@@ -417,14 +429,22 @@ export function setCsvFormat(value: CSVFormat): void {
     csvSent = "Merchant Payment";
     csvService = csvSent;
     csvReceived = "Income";
+    csvTransferIn = "Deposit"; // CoinLedger: non-taxable self-transfer
+    csvTransferOut = "Withdrawal";
+    csvBridgeIn = csvTransferIn; // there is no bridge type in the file, the two are merged in CoinLedger
+    csvBridgeOut = csvTransferOut;
     csvMined = "Mining";
   }
   if (csvFormat === CSVFormat.Koinly) {
     csvRecord = send_csv_ko;
     csvHeader = "Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Net Worth Amount,Net Worth Currency,Label,Description,TxHash";
-    csvSent = "Swap";
-    csvService = csvSent;
-    csvReceived = "Income";
+    csvSent = ""; // Koinly ignores Swap in a file
+    csvService = "cost";
+    csvReceived = "other income";
+    csvTransferIn = "";
+    csvTransferOut = "";
+    csvBridgeIn = "";
+    csvBridgeOut = "";
     csvMined = "Mining";
   }
   if (csvFormat !== CSVFormat.Koinly) setMintSummary(MintSummaryPeriod.None);
@@ -759,6 +779,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     // Mining rewards the owner claimed by hand
     const rewardsClaim: boolean =
       Object.keys(vinsum).some((adr) => getWalletName(adr) === 'Flux Mining Rewards Pool');
+    const ownSender: boolean = Object.keys(vinsum).length > 0 && Object.keys(vinsum).every((adr) => ownAddresses.has(adr));
     if (hasVin) {
       if (single) {
         console.log("has vin, vout list");
@@ -767,7 +788,8 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
       Object.keys(voutList).forEach(outAdr => {
         type = csvSent;
         if (getWalletName(outAdr) == 'Flux App Deployment') type = csvService;
-        if (getWalletName(outAdr) == 'Flux Swap Pool Hot') type = csvBridge;
+        if (getWalletName(outAdr) == 'Flux Swap Pool Hot') type = csvBridgeOut;
+        if (ownAddresses.has(outAdr)) type = csvTransferOut;
         if (outAdr !== myAddress) {
           send_qty = voutList[outAdr];
           send_coin = "FLUX";
@@ -787,7 +809,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         console.log(voutList);
       }
       Object.keys(voutList).forEach(outAdr => {
-        type = swapPoolSender ? csvBridge : rewardsClaim ? csvMined : csvReceived;
+        type = swapPoolSender ? csvBridgeIn : rewardsClaim ? csvMined : ownSender ? csvTransferIn : csvReceived;
         console.log(`recv ${swapPoolSender} is ${send_adr} ${type}`);
         if (single) console.log(`recv ${getWalletName(send_adr)} is ${send_adr} ${type}`);
         if (outAdr === myAddress) {
