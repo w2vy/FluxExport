@@ -12,79 +12,130 @@
     <!-- Form Section -->
     <div class="container">
       <h2>Flux Export Tool</h2>
-      <p>This application runs in your browser, no addresses are sent to or stored in the server.</p>
-      <form id="walletForm">
-        <!-- Wallet Address Input -->
-        <label for="address">Wallet Address:</label>
-        <input 
-          type="text" 
-          id="address" 
-          name="address" 
-          placeholder="Enter Wallet Address" 
-          required 
-        />
+      <p>FluxExport runs in your browser and your settings stay in this browser. The wallet address is sent only to the
+        public Flux API, to read its transactions. Koinly exports also read FLUX prices from DefiLlama or Binance.</p>
 
-        <!-- CSV Format Selector -->
-        <label for="csvFormat">CSV Format:</label>
-        <select id="csvFormat" name="csvFormat" required>
-          <option value="CoinLedger">CoinLedger</option>
-          <option value="Koinly">Koinly</option>
-          <option value="CoinTracker" selected>CoinTracker</option>
-        </select>
-
-        <!-- Mining Summary Selector -->
-        <label for="mintSummary">Mining Summary:</label>
-        <select id="mintSummary" name="mintSummary" required>
-          <option value="None" selected>None</option>
-          <option value="Hourly">Hourly</option>
-          <option value="Daily">Daily</option>
-          <option value="Weekly">Weekly</option>
-          <option value="Monthly">Monthly</option>
-        </select>
-
-        <!-- Start Date Input -->
-        <label for="startDate">Start Date (UTC):</label>
-        <input type="datetime-local" id="startDate" name="startDate" />
-        <p class="field-help">Value saves when selected; click outside the picker to close it.</p>
-
-        <!-- End Date Input -->
-        <label for="endDate">End Date (UTC):</label>
-        <input type="datetime-local" id="endDate" name="endDate" />
-        <p class="field-help">Value saves when selected; click outside the picker to close it.</p>
-
-        <!-- File Name Input -->
-        <label for="filename">File Name:</label>
-        <input 
-          type="text" 
-          id="filename" 
-          name="filename" 
-          required 
-          placeholder="Enter file name (e.g., wallet_export.csv)" 
-        />
-
-        <!-- Submit Button -->
-        <button type="submit">Get Wallet</button>
-      </form>
-
-      <!-- Status Message -->
-      <div id="statusMessage" aria-live="polite">
-        <p id="status">Waiting for updates...</p>
-      </div>
-
-      <div class="actions-row">
-        <div class="actions-left">
-          <button id="downloadBtn" disabled aria-disabled="true">Download CSV</button>
-          <p id="downloadNotice" class="field-help" role="status" aria-live="polite"></p>
+      <div id="mainTabs" class="main-tabs">
+        <div class="tab-list" role="tablist" aria-label="Flux Export Tool">
+          <button type="button" role="tab" id="exportTab" aria-controls="exportPanel" class="tab" data-panel="export">Export Transactions</button>
+          <button type="button" role="tab" id="configTab" aria-controls="configPanel" class="tab" data-panel="config">Configuration</button>
         </div>
-        <div class="actions-right">
-          <button id="clearCacheBtn" type="button">Clear Cache</button>
-          <p id="cacheInfo" aria-live="polite"></p>
+
+        <!-- Export Transactions -->
+        <div id="exportPanel" class="tab-panel" role="tabpanel" aria-labelledby="exportTab" data-panel="export">
+          <form id="walletForm" novalidate>
+            <fieldset id="exportFields">
+              <div id="walletRow" class="field" hidden>
+                <label for="walletSelect">Wallet:</label>
+                <select id="walletSelect"></select>
+              </div>
+
+              <div id="addressRow" class="field">
+                <label for="address">Wallet Address:</label>
+                <input type="text" id="address" name="address" placeholder="Enter Wallet Address" autocomplete="off" spellcheck="false" />
+              </div>
+
+              <p class="field-help">Dates are UTC. The start and end days are both included; leave one blank for no limit.</p>
+              <div class="date-row">
+                <div class="field">
+                  <label for="startDate">Start Date (UTC):</label>
+                  <input type="date" id="startDate" name="startDate" />
+                </div>
+                <div class="field">
+                  <label for="endDate">End Date (UTC):</label>
+                  <input type="date" id="endDate" name="endDate" />
+                </div>
+              </div>
+              <div id="yearButtons" class="button-row" role="group" aria-label="Date range shortcuts"></div>
+
+              <div class="field">
+                <label for="filename">File Name:</label>
+                <input type="text" id="filename" name="filename" autocomplete="off" spellcheck="false" />
+              </div>
+
+              <p id="formatLine" class="field-help"></p>
+              <button type="submit">Get Wallet</button>
+            </fieldset>
+          </form>
+
+          <!-- Status Message -->
+          <div id="statusMessage" aria-live="polite">
+            <p id="status">Waiting for updates...</p>
+          </div>
+
+          <div class="actions-row">
+            <div class="actions-left">
+              <button id="downloadBtn" disabled aria-disabled="true">Download CSV</button>
+              <p id="downloadNotice" class="field-help" role="status" aria-live="polite"></p>
+            </div>
+            <div class="actions-right">
+              <button id="clearCacheBtn" type="button">Clear Cache</button>
+              <p id="cacheInfo" aria-live="polite"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configuration -->
+        <div id="configPanel" class="tab-panel" role="tabpanel" aria-labelledby="configTab" data-panel="config" hidden>
+          <fieldset id="configFields">
+            <h3>My wallets</h3>
+            <div id="walletList"></div>
+            <form id="walletEditForm" novalidate>
+              <div class="field">
+                <label for="walletName">Wallet Name:</label>
+                <input type="text" id="walletName" maxlength="40" placeholder="Mining" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="walletAddress">Wallet Address:</label>
+                <input type="text" id="walletAddress" placeholder="Enter Wallet Address" autocomplete="off" spellcheck="false" />
+              </div>
+              <div class="field">
+                <label for="walletOwner">Owner (optional):</label>
+                <input type="text" id="walletOwner" maxlength="40" list="ownerNames" placeholder="Person or company" autocomplete="off" />
+                <datalist id="ownerNames"></datalist>
+              </div>
+              <div class="button-row">
+                <button type="submit" id="walletSaveBtn">Add wallet</button>
+                <button type="button" id="walletCancelBtn" hidden>Cancel</button>
+              </div>
+            </form>
+
+            <h3>Export settings</h3>
+            <div class="field">
+              <label for="csvFormat">CSV Format:</label>
+              <select id="csvFormat" name="csvFormat">
+                <option value="CoinLedger">CoinLedger</option>
+                <option value="Koinly">Koinly</option>
+                <option value="CoinTracker">CoinTracker</option>
+              </select>
+            </div>
+            <div id="ownerFormats"></div>
+            <div class="field">
+              <label for="mintSummary">Mining Summary (Koinly only):</label>
+              <select id="mintSummary" name="mintSummary">
+                <option value="None">None</option>
+                <option value="Hourly">Hourly</option>
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+              </select>
+            </div>
+
+            <h3>Backup</h3>
+            <p class="field-help backup-help">Settings are kept by this browser for this web address only. Save a backup to move them or keep them safe.</p>
+            <div class="button-row">
+              <button type="button" id="backupSaveBtn">Save backup</button>
+              <button type="button" id="backupLoadBtn">Load backup</button>
+              <input type="file" id="backupFile" accept=".json,application/json" hidden />
+            </div>
+          </fieldset>
+          <p id="configStatus" role="status" aria-live="polite"></p>
         </div>
       </div>
     </div>
 
     <section class="donations">
-      <div class="format-tabs" aria-label="CSV format tips">
+      <div id="formatTips" class="format-tabs" aria-label="CSV format tips">
         <div class="tab-list" role="tablist">
           <button type="button" role="tab" aria-selected="false" class="tab" data-format="CoinTracker">Coin Tracker</button>
           <button type="button" role="tab" aria-selected="false" class="tab" data-format="CoinLedger">Coin Ledger</button>
@@ -92,7 +143,7 @@
         </div>
         <div class="tab-panels">
           <div class="tab-panel scroll-panel" role="tabpanel" data-format="CoinTracker">
-            <p>Coin Tracker manu useful features and it is the one I use for my own crypto!</p>
+            <p>Coin Tracker has many useful features and it is the one I use for my own crypto!</p>
             <ul class="bullet-list">
               <li>Handles Flux Node Rewards without counting them against your subscription’s transaction limit.</li>
               <li>Avoid overlapping date ranges; partial-year imports that overlap will create duplicates.</li>
@@ -100,7 +151,7 @@
               <li>For Flux Parallel Asset swaps, link the PA wallet token entry and the Flux chain entry as a “Bridge” transfer to keep it non-taxable.</li>
               <li>Payments for renewing any Flux Applications you have deployed will be marked as Service fees.</li>
             </ul>
-            <p class="bonus-note">BONUS: New Accoints Receive 20% Discount!<br>Sign up here: <a href="https://cointracker.cello.so/cOM1jhoGB7D" target="_blank" rel="noopener noreferrer">https://cointracker.cello.so/cOM1jhoGB7D</a><br>I receive a referral bonus after 30 days (the refund period).</p>
+            <p class="bonus-note">BONUS: New Accounts Receive 20% Discount!<br>Sign up here: <a href="https://cointracker.cello.so/cOM1jhoGB7D" target="_blank" rel="noopener noreferrer">https://cointracker.cello.so/cOM1jhoGB7D</a><br>I receive a referral bonus after 30 days (the refund period).</p>
             <h4 class="demo-heading">Step By Step Demo</h4>
             <ul class="demo-steps">
               <li>
@@ -233,11 +284,11 @@
             </ul>
           </div>
           <div class="tab-panel" role="tabpanel" data-format="CoinLedger">
-            <p>CoinLedger-specific guidance goes here. Add any tips or reminders for this format.</p>
+            <p>Node rewards are exported as Mining, other FLUX received as Income, and FLUX sent as Merchant Payment. Review the types after importing.</p>
           </div>
           <div class="tab-panel" role="tabpanel" data-format="Koinly">
-            <p>This format includes the net worth of each transaction and this tool uses hourly price data to calcualte it.</p>
-            <p>This format allows collecting node rewards and providing Hourly, Daily, Weekly or Monthy transactions.
+            <p>This format includes the net worth of each transaction and this tool uses hourly price data to calculate it.</p>
+            <p>This format allows collecting node rewards and providing Hourly, Daily, Weekly or Monthly transactions.
                The summary transactions include the sum of the net worth of each reward.</p>
           </div>
         </div>

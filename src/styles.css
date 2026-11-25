@@ -76,17 +76,16 @@ button:hover {
   background-color: #4ec1ff;
 }
 
-input[type="datetime-local"] {
+input[type="date"] {
   font-family: inherit;
   color-scheme: dark;
 }
 
-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
-input[type="datetime-local"]::-moz-focus-inner {
+input[type="date"]::-moz-focus-inner {
   border: 0;
 }
 
@@ -326,7 +325,7 @@ input[type="datetime-local"]::-moz-focus-inner {
 
 .btc-address {
   margin-top: auto;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 footer {
@@ -342,5 +341,130 @@ footer {
   }
   .container, .donations {
     max-width: none;
+  }
+}
+
+/* Left panel tabs */
+[hidden] {
+  display: none !important;
+}
+
+fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+fieldset:disabled {
+  opacity: 0.6;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.main-tabs {
+  border: 1px solid rgba(233, 245, 255, 0.25);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.tab-list .tab {
+  margin-bottom: 0;
+  border-radius: 0;
+}
+
+.main-tabs .tab-panel {
+  padding: 20px 16px 4px;
+}
+
+.main-tabs h3 {
+  margin: 4px 0 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.date-row .field {
+  flex: 1 1 200px;
+}
+
+.date-row, .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+}
+
+.main-tabs .field-help {
+  margin: 0 0 12px;
+}
+
+.main-tabs .small-btn {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.wallet-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.wallet-row .small-btn {
+  margin-bottom: 0;
+}
+
+.wallet-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.wallet-text span {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+#walletEditForm {
+  margin-top: 8px;
+}
+
+.owner-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.owner-row label {
+  flex: 0 1 140px;
+  overflow-wrap: anywhere;
+}
+
+.owner-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .wallet-text {
+    flex-basis: 100%;
   }
 }
