@@ -241,6 +241,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }).catch((error) => {
             console.error('Error while fetching wallet:', error);
+            cvsDownloadData = "";
+            const message = error instanceof Error ? error.message : 'Unable to read this wallet.';
+            disableDownloadBtn('Export failed, no file to download.');
+            updateStatusMessage(message);
         });
         
     });

@@ -24,6 +24,8 @@ I would like to add an option to the user to group the transactions by day, week
 */
 
 
+import { MissingPriceError, clearPrices, requirePrice, startPriceRun } from "./prices.js";
+
 interface Txid {
   txid: string;
 }
@@ -90,11 +92,6 @@ interface vsum {
   [key: string]: number;
 }
 
-interface FluxPricePoint {
-  timestamp: number;
-  price: number;
-}
-
 export enum MintSummaryPeriod {
   None = "None",
   Hourly = "Hourly",
@@ -158,123 +155,6 @@ function getWalletName(adr: string) : string {
   return adr;
 }
 
-const HOUR_IN_SECONDS = 60 * 60;
-let cachedFluxPrices: FluxPricePoint[] | null = null;
-let loadingFluxPrices: Promise<FluxPricePoint[] | null> | null = null;
-let extendingFluxPrices: Promise<void> | null = null;
-let extendingTarget = 0;
-
-function isFluxPricePoint(entry: unknown): entry is FluxPricePoint {
-  return typeof entry === "object" &&
-    entry !== null &&
-    typeof (entry as FluxPricePoint).timestamp === "number" &&
-    typeof (entry as FluxPricePoint).price === "number";
-}
-
-function cacheFluxPricePoint(timestamp: number, price: number): void {
-  if (!Number.isFinite(price) || price === 0) return;
-  if (!cachedFluxPrices) cachedFluxPrices = [];
-  let low = 0;
-  let high = cachedFluxPrices.length - 1;
-  let insertIdx = cachedFluxPrices.length;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const midTimestamp = cachedFluxPrices[mid].timestamp;
-    if (midTimestamp === timestamp) {
-      cachedFluxPrices[mid] = { timestamp, price };
-      return;
-    }
-    if (midTimestamp < timestamp) {
-      low = mid + 1;
-    } else {
-      insertIdx = mid;
-      high = mid - 1;
-    }
-  }
-  cachedFluxPrices.splice(insertIdx, 0, { timestamp, price });
-}
-
-async function loadFluxPrices(): Promise<FluxPricePoint[] | null> {
-  if (cachedFluxPrices) return cachedFluxPrices;
-  if (loadingFluxPrices) return loadingFluxPrices;
-
-  loadingFluxPrices = (async () => {
-    try {
-      // wallet.js sits next to flux.json in dist/, so a local relative URL works when served.
-      const fluxUrl = new URL('./flux.json', import.meta.url);
-      const response = await fetch(fluxUrl);
-      if (!response.ok) {
-        console.error(`Failed to load flux.json (${fluxUrl}): ${response.status} ${response.statusText}`);
-        return null;
-      }
-      const data = await response.json();
-      const parsed: FluxPricePoint[] = Array.isArray(data?.prices) ? data.prices.filter(isFluxPricePoint) : [];
-      cachedFluxPrices = parsed.sort((a, b) => a.timestamp - b.timestamp);
-      return cachedFluxPrices;
-    } catch (error) {
-      console.error('Error loading flux.json', error);
-      return null;
-    } finally {
-      loadingFluxPrices = null;
-    }
-  })();
-
-  return loadingFluxPrices;
-}
-
-async function fetchFluxPriceRange(start: number, end: number): Promise<FluxPricePoint[] | null> {
-  const url = new URL("https://flux.beer/api/prices/range");
-  url.searchParams.set("start", String(start));
-  url.searchParams.set("end", String(end));
-  try {
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      console.error(`Failed to fetch flux prices: ${response.status} ${response.statusText}`);
-      return null;
-    }
-    const data = await response.json();
-    const parsed: FluxPricePoint[] = Array.isArray(data?.prices) ? data.prices.filter(isFluxPricePoint) : [];
-    return parsed;
-  } catch (error) {
-    console.error("Error fetching flux prices", error);
-    return null;
-  }
-}
-
-async function ensureFluxPriceCoverage(targetTimestamp: number): Promise<FluxPricePoint[] | null> {
-  const prices = await loadFluxPrices();
-  if (prices && !cachedFluxPrices) cachedFluxPrices = prices;
-  if (!cachedFluxPrices) cachedFluxPrices = [];
-  if (cachedFluxPrices.length === 0) return cachedFluxPrices;
-
-  const latest = cachedFluxPrices[cachedFluxPrices.length - 1].timestamp;
-  console.log(`ensureFluxPriceCoverage: latest ${latest} end ${targetTimestamp}`);
-  if (targetTimestamp <= latest) return cachedFluxPrices;
-
-  if (extendingFluxPrices && targetTimestamp <= extendingTarget) {
-    await extendingFluxPrices;
-    return cachedFluxPrices;
-  }
-
-  extendingTarget = targetTimestamp;
-  extendingFluxPrices = (async () => {
-    const start = latest + 1;
-    const fetched = await fetchFluxPriceRange(start, targetTimestamp);
-    if (Array.isArray(fetched)) {
-      fetched.forEach((entry) => cacheFluxPricePoint(entry.timestamp, entry.price));
-    }
-  })();
-
-  try {
-    await extendingFluxPrices;
-  } finally {
-    extendingFluxPrices = null;
-    extendingTarget = 0;
-  }
-
-  return cachedFluxPrices;
-}
-
 interface MintSummaryState {
   periodStart: number;
   periodEnd: number;
@@ -290,10 +170,7 @@ function resetMintSummary(): void {
 }
 
 export async function clearCaches(): Promise<void> {
-  cachedFluxPrices = null;
-  loadingFluxPrices = null;
-  extendingFluxPrices = null;
-  extendingTarget = 0;
+  clearPrices();
   txnCacheMemory.clear();
   const db = await openTxnCache();
   if (!db) return;
@@ -508,32 +385,6 @@ function finalizeMintSummary(data: string[]): void {
     ));
   }
   resetMintSummary();
-}
-
-export async function getPrice(dateTime: number): Promise<number | null> {
-  const targetTimestamp = endDate > 0 ? Math.max(endDate, dateTime) : dateTime;
-  const pricePoints = await ensureFluxPriceCoverage(targetTimestamp) ?? [];
-  if (pricePoints.length > 0) {
-    let low = 0;
-    let high = pricePoints.length - 1;
-    let idx = -1;
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      if (pricePoints[mid].timestamp <= dateTime) {
-        idx = mid;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-    if (idx !== -1) {
-      const candidate = pricePoints[idx];
-      const next = pricePoints[idx + 1];
-      const windowEnd = next ? next.timestamp : candidate.timestamp + HOUR_IN_SECONDS;
-      if (dateTime < windowEnd) return candidate.price;
-    }
-  }
-  return null;
 }
 
 // Setter functions
@@ -837,7 +688,8 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         }
     });
   }
-  coin_value = (await getPrice(dateTime)) ?? 0.75;
+  // Only the Koinly format has a USD column
+  coin_value = csvFormat === CSVFormat.Koinly ? await requirePrice(dateTime, txid) : 0;
   console.log(`Time is ${dateTime} price ${coin_value}`);
   var msg: string = "";
   var type: string = "";
@@ -975,6 +827,7 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
     let rows: number = 0;
     let numtxn : number = 0;
     resetMintSummary();
+    startPriceRun();
     if (!TXNs || !TXNs.data) {
       console.log(responseData);
       console.error("Invalid response structure.");
@@ -1068,6 +921,7 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
     await sleep(2000);
     return {data, rows};
   } catch (error) {
+    if (error instanceof MissingPriceError) throw error;
     console.error("Error parsing or processing wallet data:", error);
   }
   const data:string[] = ["Error parsing or processing wallet data"];
