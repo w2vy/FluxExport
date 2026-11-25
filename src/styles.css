@@ -335,6 +335,10 @@ footer {
   color: #8fbbe5;
 }
 
+footer a {
+  color: #9ddcff;
+}
+
 @media (max-width: 960px) {
   .main-layout {
     margin: 24px auto;

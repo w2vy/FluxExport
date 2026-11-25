@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FluxExport</title>
+  <script>
+    // The app's own address is fluxexport.moltentech.us; the Flux addresses lead there
+    if (location.hostname.endsWith('.runonflux.io')) {
+      location.replace('https://fluxexport.moltentech.us' + location.pathname + location.search + location.hash);
+    }
+  </script>
+  <link rel="canonical" href="https://fluxexport.moltentech.us/">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -306,8 +313,8 @@
   <script type="module" src="script.js"></script>
 
   <footer>
-    <p>FluxExport ver __APP_VERSION__ &copy; 2026 Thomas A. Moulton, W2VY. All rights reserved.</p>
-    <p>Support: Discord RunOnFlux @w2vy</p>
+    <p>FluxExport ver __APP_VERSION__ &copy; 2026 Molten Tech LLC. All rights reserved.</p>
+    <p>Support: <a href="https://discord.gg/9NHB3QP557" target="_blank" rel="noopener noreferrer">Molten Tech Discord</a> or @w2vy on the RunOnFlux Discord</p>
   </footer>
 </body>
 </html>
