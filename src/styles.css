@@ -446,20 +446,41 @@ button:disabled {
   margin-top: 8px;
 }
 
-.owner-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
+.wallet-group {
+  margin-bottom: 18px;
 }
 
-.owner-row label {
-  flex: 0 1 140px;
+.wallet-heading, .wallet-format {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wallet-heading h4 {
+  flex: 1 1 140px;
+  min-width: 0;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
-.owner-row select {
-  flex: 1 1 auto;
+.wallet-heading .small-btn, .wallet-format label, .wallet-format input, .wallet-format select {
+  margin-bottom: 0;
+}
+
+.wallet-format label {
+  flex: 0 0 90px;
+}
+
+.wallet-format input, .wallet-format select {
+  flex: 1 1 140px;
   min-width: 0;
+}
+
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 button:focus-visible, input:focus-visible, select:focus-visible {

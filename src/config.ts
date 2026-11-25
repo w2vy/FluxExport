@@ -1,29 +1,33 @@
 /*
 Saved settings: the user's wallets and export defaults.
+A wallet is one installation, for example Zelcore LLC, and holds many addresses.
+Its company (or person) is who the wallet belongs to; several wallets can have the same one.
 Kept in this browser (localStorage) only. The backup file holds the same data.
 */
 import { CSVFormat, MintSummaryPeriod } from './wallet.js';
 
-export interface SavedWallet {
+export interface SavedAddress {
   id: string;
+  wallet: string;
   name: string;
   address: string;
-  owner: string; // "" when not set
 }
 
 export interface Settings {
-  version: 1;
-  wallets: SavedWallet[];
+  version: 2;
+  addresses: SavedAddress[];
   csvFormat: CSVFormat;
-  ownerFormats: { [owner: string]: CSVFormat };
+  walletFormats: { [wallet: string]: CSVFormat };
+  walletCompanies: { [wallet: string]: string };
   mintSummary: MintSummaryPeriod;
 }
 
 const STORAGE_KEY = 'fluxexport-settings';
 const MAX_NAME = 40;
+const UNNAMED_WALLET = 'My wallet';
 
 export function defaultSettings(): Settings {
-  return { version: 1, wallets: [], csvFormat: CSVFormat.CoinTracker, ownerFormats: {}, mintSummary: MintSummaryPeriod.None };
+  return { version: 2, addresses: [], csvFormat: CSVFormat.CoinTracker, walletFormats: {}, walletCompanies: {}, mintSummary: MintSummaryPeriod.None };
 }
 
 export function isFluxAddress(address: string): boolean {
@@ -50,28 +54,39 @@ export function parseSettings(text: string): Settings {
   } catch {
     throw new Error('This is not a FluxExport settings file.');
   }
-  if (!raw || raw.version !== 1 || !Array.isArray(raw.wallets)) throw new Error('This is not a FluxExport settings file.');
+  // Version 1 (FluxExport 1.7) kept one "owner" where version 2 keeps the wallet and its company
+  const entries = raw?.version === 1 ? raw.wallets : raw?.version === 2 ? raw.addresses : null;
+  const formats = raw?.version === 1 ? raw.ownerFormats : raw?.walletFormats;
+  if (!Array.isArray(entries)) throw new Error('This is not a FluxExport settings file.');
 
   const settings = defaultSettings();
-  raw.wallets.forEach((entry: any, index: number) => {
+  entries.forEach((entry: any, index: number) => {
     const address = typeof entry?.address === 'string' ? entry.address.trim() : '';
-    if (!isFluxAddress(address)) throw new Error(`Wallet ${index + 1} in this file does not have a Flux address.`);
-    if (settings.wallets.some(wallet => wallet.address === address)) return;
-    settings.wallets.push({
+    if (!isFluxAddress(address)) throw new Error(`Entry ${index + 1} in this file does not have a Flux address.`);
+    if (settings.addresses.some(saved => saved.address === address)) return;
+    settings.addresses.push({
       id: newId(),
+      wallet: spelledAs(settings, cleanText(raw.version === 1 ? entry.owner : entry.wallet) || UNNAMED_WALLET),
       name: cleanText(entry.name) || address,
       address,
-      owner: cleanText(entry.owner),
     });
   });
   if (isFormat(raw.csvFormat)) settings.csvFormat = raw.csvFormat;
   if (Object.values(MintSummaryPeriod).includes(raw.mintSummary)) settings.mintSummary = raw.mintSummary;
-  if (raw.ownerFormats && typeof raw.ownerFormats === 'object') {
-    for (const owner of owners(settings)) {
-      const format = Object.prototype.hasOwnProperty.call(raw.ownerFormats, owner) ? raw.ownerFormats[owner] : undefined;
-      if (isFormat(format)) settings.ownerFormats[owner] = format;
+  if (formats && typeof formats === 'object') {
+    for (const wallet of walletNames(settings)) {
+      const format = Object.prototype.hasOwnProperty.call(formats, wallet) ? formats[wallet] : undefined;
+      if (isFormat(format)) settings.walletFormats[wallet] = format;
     }
   }
+  walletNames(settings).forEach(wallet => {
+    if (raw.version === 1) {
+      if (wallet !== UNNAMED_WALLET) setWalletCompany(settings, wallet, wallet);
+    } else if (raw.walletCompanies && Object.prototype.hasOwnProperty.call(raw.walletCompanies, wallet)) {
+      setWalletCompany(settings, wallet, cleanText(raw.walletCompanies[wallet]));
+    }
+  });
+  tidy(settings);
   return settings;
 }
 
@@ -100,55 +115,115 @@ export function settingsText(settings: Settings): string {
   return JSON.stringify(settings, null, 2);
 }
 
-/** Owners with a wallet, in name order, without the blank one. */
-export function owners(settings: Settings): string[] {
-  return Array.from(new Set(settings.wallets.map(wallet => wallet.owner).filter(owner => owner !== ''))).sort((a, b) => a.localeCompare(b));
+/** Wallets with an address, in name order. */
+export function walletNames(settings: Settings): string[] {
+  return Array.from(new Set(settings.addresses.map(saved => saved.wallet))).sort((a, b) => a.localeCompare(b));
 }
 
-export function walletsOf(settings: Settings, owner: string): SavedWallet[] {
-  return settings.wallets.filter(wallet => wallet.owner === owner).sort((a, b) => a.name.localeCompare(b.name));
+export function addressesOf(settings: Settings, wallet: string): SavedAddress[] {
+  return settings.addresses.filter(saved => saved.wallet === wallet).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function formatFor(settings: Settings, wallet: SavedWallet | null): CSVFormat {
-  if (wallet && Object.prototype.hasOwnProperty.call(settings.ownerFormats, wallet.owner)) return settings.ownerFormats[wallet.owner];
+export function formatFor(settings: Settings, saved: SavedAddress | null): CSVFormat {
+  if (saved && Object.prototype.hasOwnProperty.call(settings.walletFormats, saved.wallet)) return settings.walletFormats[saved.wallet];
   return settings.csvFormat;
 }
 
-/** Add a wallet, or change the one with this id. Returns what is wrong with it, or "". */
-export function putWallet(settings: Settings, id: string, name: string, address: string, owner: string): string {
-  const clean = { name: cleanText(name), address: address.trim(), owner: cleanText(owner) };
-  if (!clean.name) return 'Enter a name for the wallet.';
+/** The mining summary is for Koinly only. */
+export function usesKoinly(settings: Settings): boolean {
+  return settings.csvFormat === CSVFormat.Koinly || Object.values(settings.walletFormats).includes(CSVFormat.Koinly);
+}
+
+/** Add an address, or change the one with this id. Returns what is wrong with it, or "". */
+export function putAddress(settings: Settings, id: string, wallet: string, name: string, address: string): string {
+  const clean = { wallet: spelledAs(settings, cleanText(wallet)), name: cleanText(name), address: address.trim() };
+  if (!clean.wallet) return 'Enter the wallet this address is in.';
+  if (!clean.name) return 'Enter a name for the address.';
   if (!isFluxAddress(clean.address)) return 'Enter a Flux address: t1 or t3 and 35 characters in all.';
-  const same = settings.wallets.find(wallet => wallet.address === clean.address && wallet.id !== id);
-  if (same) return `That address is already saved as ${same.name}.`;
-  const existing = settings.wallets.find(wallet => wallet.id === id);
+  const others = settings.addresses.filter(saved => saved.id !== id);
+  const same = others.find(saved => saved.address === clean.address);
+  if (same) return `That address is already saved as ${same.wallet}: ${same.name}.`;
+  if (others.some(saved => saved.wallet === clean.wallet && saved.name.toLowerCase() === clean.name.toLowerCase())) {
+    return `${clean.wallet} already has an address named ${clean.name}.`;
+  }
+  const existing = settings.addresses.find(saved => saved.id === id);
   if (existing) Object.assign(existing, clean);
-  else settings.wallets.push({ id: newId(), ...clean });
-  dropUnusedOwners(settings);
+  else settings.addresses.push({ id: newId(), ...clean });
+  tidy(settings);
   return '';
 }
 
-export function removeWallet(settings: Settings, id: string): void {
-  settings.wallets = settings.wallets.filter(wallet => wallet.id !== id);
-  dropUnusedOwners(settings);
+export function removeAddress(settings: Settings, id: string): void {
+  settings.addresses = settings.addresses.filter(saved => saved.id !== id);
+  tidy(settings);
 }
 
-function dropUnusedOwners(settings: Settings): void {
-  const used = owners(settings);
-  Object.keys(settings.ownerFormats).forEach(owner => {
-    if (!used.includes(owner)) delete settings.ownerFormats[owner];
+/** Returns what is wrong with the new name, or "". */
+export function renameWallet(settings: Settings, wallet: string, newName: string): string {
+  const clean = cleanText(newName);
+  if (!clean) return 'Enter a name for the wallet.';
+  if (walletNames(settings).some(other => other !== wallet && other.toLowerCase() === clean.toLowerCase())) return `There is already a wallet named ${clean}.`;
+  settings.addresses.filter(saved => saved.wallet === wallet).forEach(saved => { saved.wallet = clean; });
+  const format = settings.walletFormats[wallet];
+  delete settings.walletFormats[wallet];
+  if (format) settings.walletFormats[clean] = format;
+  const company = settings.walletCompanies[wallet];
+  delete settings.walletCompanies[wallet];
+  if (company) settings.walletCompanies[clean] = company;
+  return '';
+}
+
+export function setDefaultFormat(settings: Settings, format: CSVFormat): void {
+  settings.csvFormat = format;
+  tidy(settings);
+}
+
+/** "" for the default format. */
+export function setWalletFormat(settings: Settings, wallet: string, format: CSVFormat | ''): void {
+  if (format === '') delete settings.walletFormats[wallet];
+  else settings.walletFormats[wallet] = format;
+  tidy(settings);
+}
+
+export function companies(settings: Settings): string[] {
+  return Array.from(new Set(Object.values(settings.walletCompanies))).sort((a, b) => a.localeCompare(b));
+}
+
+/** "" for none. Returns the name as saved. */
+export function setWalletCompany(settings: Settings, wallet: string, name: string): string {
+  const clean = cleanText(name);
+  delete settings.walletCompanies[wallet];
+  if (!clean) return '';
+  const company = companies(settings).find(other => other.toLowerCase() === clean.toLowerCase()) ?? clean;
+  settings.walletCompanies[wallet] = company;
+  return company;
+}
+
+/** The name of a saved wallet that differs only in upper and lower case, else the name as given. */
+function spelledAs(settings: Settings, wallet: string): string {
+  return settings.addresses.find(saved => saved.wallet.toLowerCase() === wallet.toLowerCase())?.wallet ?? wallet;
+}
+
+function tidy(settings: Settings): void {
+  const used = walletNames(settings);
+  Object.keys(settings.walletFormats).forEach(wallet => {
+    if (!used.includes(wallet)) delete settings.walletFormats[wallet];
   });
+  Object.keys(settings.walletCompanies).forEach(wallet => {
+    if (!used.includes(wallet)) delete settings.walletCompanies[wallet];
+  });
+  if (!usesKoinly(settings)) settings.mintSummary = MintSummaryPeriod.None;
 }
 
-/** For example LLC-Mining_2026-01-01_2026-11-25.csv */
-export function suggestFileName(wallet: SavedWallet | null, address: string, start: string, end: string, today: string): string {
+/** For example Zelcore-LLC-Mining_2026-01-01_2026-11-25.csv */
+export function suggestFileName(saved: SavedAddress | null, address: string, start: string, end: string, today: string): string {
   const slug = (text: string) => text.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   let who = address ? address.slice(0, 8) : 'wallet';
-  if (wallet) {
-    const name = slug(wallet.name);
-    const owner = slug(wallet.owner);
-    const hasOwner = owner === '' || name.toLowerCase() === owner.toLowerCase() || name.toLowerCase().startsWith(`${owner.toLowerCase()}-`);
-    who = (hasOwner ? name : `${owner}-${name}`) || address.slice(0, 8);
+  if (saved) {
+    const name = slug(saved.name);
+    const wallet = slug(saved.wallet);
+    const hasWallet = wallet === '' || name.toLowerCase() === wallet.toLowerCase() || name.toLowerCase().startsWith(`${wallet.toLowerCase()}-`);
+    who = (hasWallet ? name : `${wallet}-${name}`) || address.slice(0, 8);
   }
   return `${slug(who)}_${start || 'all'}_${end || today}.csv`;
 }
