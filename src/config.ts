@@ -1,6 +1,7 @@
 /*
 Saved settings: the user's wallets and export defaults.
 A wallet is one installation, for example Zelcore LLC, and holds many addresses.
+Its company (or person) is who the wallet belongs to; several wallets can have the same one.
 Kept in this browser (localStorage) only. The backup file holds the same data.
 */
 import { CSVFormat, MintSummaryPeriod } from './wallet.js';
@@ -17,6 +18,7 @@ export interface Settings {
   addresses: SavedAddress[];
   csvFormat: CSVFormat;
   walletFormats: { [wallet: string]: CSVFormat };
+  walletCompanies: { [wallet: string]: string };
   mintSummary: MintSummaryPeriod;
 }
 
@@ -25,7 +27,7 @@ const MAX_NAME = 40;
 const UNNAMED_WALLET = 'My wallet';
 
 export function defaultSettings(): Settings {
-  return { version: 2, addresses: [], csvFormat: CSVFormat.CoinTracker, walletFormats: {}, mintSummary: MintSummaryPeriod.None };
+  return { version: 2, addresses: [], csvFormat: CSVFormat.CoinTracker, walletFormats: {}, walletCompanies: {}, mintSummary: MintSummaryPeriod.None };
 }
 
 export function isFluxAddress(address: string): boolean {
@@ -52,7 +54,7 @@ export function parseSettings(text: string): Settings {
   } catch {
     throw new Error('This is not a FluxExport settings file.');
   }
-  // Version 1 (FluxExport 1.7) kept "owner" where version 2 keeps "wallet"
+  // Version 1 (FluxExport 1.7) kept one "owner" where version 2 keeps the wallet and its company
   const entries = raw?.version === 1 ? raw.wallets : raw?.version === 2 ? raw.addresses : null;
   const formats = raw?.version === 1 ? raw.ownerFormats : raw?.walletFormats;
   if (!Array.isArray(entries)) throw new Error('This is not a FluxExport settings file.');
@@ -77,6 +79,13 @@ export function parseSettings(text: string): Settings {
       if (isFormat(format)) settings.walletFormats[wallet] = format;
     }
   }
+  walletNames(settings).forEach(wallet => {
+    if (raw.version === 1) {
+      if (wallet !== UNNAMED_WALLET) setWalletCompany(settings, wallet, wallet);
+    } else if (raw.walletCompanies && Object.prototype.hasOwnProperty.call(raw.walletCompanies, wallet)) {
+      setWalletCompany(settings, wallet, cleanText(raw.walletCompanies[wallet]));
+    }
+  });
   tidy(settings);
   return settings;
 }
@@ -158,6 +167,9 @@ export function renameWallet(settings: Settings, wallet: string, newName: string
   const format = settings.walletFormats[wallet];
   delete settings.walletFormats[wallet];
   if (format) settings.walletFormats[clean] = format;
+  const company = settings.walletCompanies[wallet];
+  delete settings.walletCompanies[wallet];
+  if (company) settings.walletCompanies[clean] = company;
   return '';
 }
 
@@ -173,6 +185,20 @@ export function setWalletFormat(settings: Settings, wallet: string, format: CSVF
   tidy(settings);
 }
 
+export function companies(settings: Settings): string[] {
+  return Array.from(new Set(Object.values(settings.walletCompanies))).sort((a, b) => a.localeCompare(b));
+}
+
+/** "" for none. Returns the name as saved. */
+export function setWalletCompany(settings: Settings, wallet: string, name: string): string {
+  const clean = cleanText(name);
+  delete settings.walletCompanies[wallet];
+  if (!clean) return '';
+  const company = companies(settings).find(other => other.toLowerCase() === clean.toLowerCase()) ?? clean;
+  settings.walletCompanies[wallet] = company;
+  return company;
+}
+
 /** The name of a saved wallet that differs only in upper and lower case, else the name as given. */
 function spelledAs(settings: Settings, wallet: string): string {
   return settings.addresses.find(saved => saved.wallet.toLowerCase() === wallet.toLowerCase())?.wallet ?? wallet;
@@ -182,6 +208,9 @@ function tidy(settings: Settings): void {
   const used = walletNames(settings);
   Object.keys(settings.walletFormats).forEach(wallet => {
     if (!used.includes(wallet)) delete settings.walletFormats[wallet];
+  });
+  Object.keys(settings.walletCompanies).forEach(wallet => {
+    if (!used.includes(wallet)) delete settings.walletCompanies[wallet];
   });
   if (!usesKoinly(settings)) settings.mintSummary = MintSummaryPeriod.None;
 }

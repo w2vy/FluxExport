@@ -465,11 +465,15 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-.wallet-heading .small-btn, .wallet-format label, .wallet-format select {
+.wallet-heading .small-btn, .wallet-format label, .wallet-format input, .wallet-format select {
   margin-bottom: 0;
 }
 
-.wallet-format select {
+.wallet-format label {
+  flex: 0 0 90px;
+}
+
+.wallet-format input, .wallet-format select {
   flex: 1 1 140px;
   min-width: 0;
 }

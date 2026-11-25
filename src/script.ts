@@ -1,5 +1,5 @@
 import { getwallet, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate, setMintSummary, MintSummaryPeriod, clearCaches, getCacheStats } from './wallet.js';
-import { Settings, SavedAddress, loadSettings, saveSettings, settingsText, parseSettings, walletNames, addressesOf, formatFor, usesKoinly, putAddress, removeAddress, renameWallet, setDefaultFormat, setWalletFormat, isFluxAddress, suggestFileName } from './config.js';
+import { Settings, SavedAddress, loadSettings, saveSettings, settingsText, parseSettings, walletNames, addressesOf, formatFor, usesKoinly, putAddress, removeAddress, renameWallet, setDefaultFormat, setWalletFormat, companies, setWalletCompany, isFluxAddress, suggestFileName } from './config.js';
 
 const OTHER_ADDRESS = 'other';
 const DAY_IN_SECONDS = 24 * 60 * 60;
@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const walletAddress = byId<HTMLInputElement>('walletAddress');
   const walletGroup = byId<HTMLInputElement>('walletGroup');
   const walletGroups = byId<HTMLDataListElement>('walletGroups');
+  const companyNames = byId<HTMLDataListElement>('companyNames');
   const walletSaveBtn = byId<HTMLButtonElement>('walletSaveBtn');
   const walletCancelBtn = byId<HTMLButtonElement>('walletCancelBtn');
   const csvFormatSelect = byId<HTMLSelectElement>('csvFormat');
@@ -293,10 +294,14 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshExport();
   };
 
-  const settingsChanged = (message: string) => {
+  const storeSettings = (message: string) => {
     const saved = saveSettings(settings);
     configStatus.textContent = saved ? message : 'This browser did not save the settings. Use "Save backup" to keep them.';
     inputsChanged();
+  };
+
+  const settingsChanged = (message: string) => {
+    storeSettings(message);
     refreshAll();
   };
 
@@ -370,6 +375,36 @@ document.addEventListener('DOMContentLoaded', () => {
     return row;
   };
 
+  const renderCompanyNames = () => {
+    companyNames.textContent = '';
+    companies(settings).forEach(company => addOption(companyNames, company, company));
+  };
+
+  const walletCompanyFor = (wallet: string, id: string): HTMLElement => {
+    const row = document.createElement('div');
+    row.className = 'wallet-format';
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.textContent = 'Company:';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = id;
+    input.maxLength = 40;
+    input.setAttribute('list', 'companyNames');
+    input.placeholder = 'Company or person';
+    input.autocomplete = 'off';
+    input.setAttribute('aria-label', `Company or person ${wallet} belongs to`);
+    input.value = settings.walletCompanies[wallet] ?? '';
+    input.addEventListener('change', () => {
+      // The list is not drawn again here: the click that left this field may be on one of its buttons
+      input.value = setWalletCompany(settings, wallet, input.value);
+      storeSettings(`${wallet} company saved.`);
+      renderCompanyNames();
+    });
+    row.append(label, input);
+    return row;
+  };
+
   const renderConfig = () => {
     const names = walletNames(settings);
     walletList.textContent = '';
@@ -404,12 +439,14 @@ document.addEventListener('DOMContentLoaded', () => {
           walletName.focus();
         }),
       );
-      group.append(heading, walletFormatFor(wallet, `walletFormat${index}`), ...addressesOf(settings, wallet).map(addressRowFor));
+      group.append(heading, walletCompanyFor(wallet, `walletCompany${index}`), walletFormatFor(wallet, `walletFormat${index}`), ...addressesOf(settings, wallet).map(addressRowFor));
       walletList.appendChild(group);
     });
 
     walletGroups.textContent = '';
     names.forEach(wallet => addOption(walletGroups, wallet, wallet));
+
+    renderCompanyNames();
 
     csvFormatSelect.value = settings.csvFormat;
     mintSummarySelect.value = settings.mintSummary;
