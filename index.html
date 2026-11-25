@@ -86,37 +86,37 @@
         <div id="configPanel" class="tab-panel" role="tabpanel" aria-labelledby="configTab" data-panel="config" hidden>
           <fieldset id="configFields">
             <h3>My wallets</h3>
+            <p class="field-help">A wallet is one installation, like Zelcore LLC or SSP TAM, and can have many addresses.</p>
             <div id="walletList"></div>
             <form id="walletEditForm" novalidate>
               <div class="field">
-                <label for="walletName">Wallet Name:</label>
+                <label for="walletGroup">Wallet:</label>
+                <input type="text" id="walletGroup" maxlength="40" list="walletGroups" placeholder="Zelcore LLC" autocomplete="off" />
+                <datalist id="walletGroups"></datalist>
+              </div>
+              <div class="field">
+                <label for="walletName">Address Name:</label>
                 <input type="text" id="walletName" maxlength="40" placeholder="Mining" autocomplete="off" />
               </div>
               <div class="field">
-                <label for="walletAddress">Wallet Address:</label>
+                <label for="walletAddress">Address:</label>
                 <input type="text" id="walletAddress" placeholder="Enter Wallet Address" autocomplete="off" spellcheck="false" />
               </div>
-              <div class="field">
-                <label for="walletOwner">Owner (optional):</label>
-                <input type="text" id="walletOwner" maxlength="40" list="ownerNames" placeholder="Person or company" autocomplete="off" />
-                <datalist id="ownerNames"></datalist>
-              </div>
               <div class="button-row">
-                <button type="submit" id="walletSaveBtn">Add wallet</button>
+                <button type="submit" id="walletSaveBtn">Add address</button>
                 <button type="button" id="walletCancelBtn" hidden>Cancel</button>
               </div>
             </form>
 
             <h3>Export settings</h3>
             <div class="field">
-              <label for="csvFormat">CSV Format:</label>
+              <label for="csvFormat">Default CSV Format:</label>
               <select id="csvFormat" name="csvFormat">
                 <option value="CoinLedger">CoinLedger</option>
                 <option value="Koinly">Koinly</option>
                 <option value="CoinTracker">CoinTracker</option>
               </select>
             </div>
-            <div id="ownerFormats"></div>
             <div class="field">
               <label for="mintSummary">Mining Summary (Koinly only):</label>
               <select id="mintSummary" name="mintSummary">

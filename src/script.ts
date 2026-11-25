@@ -1,5 +1,5 @@
 import { getwallet, setAddress, setCsvFormat, parseDateToEpoch, CSVFormat, setStartDate, setEndDate, setMintSummary, MintSummaryPeriod, clearCaches, getCacheStats } from './wallet.js';
-import { Settings, SavedWallet, loadSettings, saveSettings, settingsText, parseSettings, owners, walletsOf, formatFor, putWallet, removeWallet, isFluxAddress, suggestFileName } from './config.js';
+import { Settings, SavedAddress, loadSettings, saveSettings, settingsText, parseSettings, walletNames, addressesOf, formatFor, usesKoinly, putAddress, removeAddress, renameWallet, setDefaultFormat, setWalletFormat, isFluxAddress, suggestFileName } from './config.js';
 
 const OTHER_ADDRESS = 'other';
 const DAY_IN_SECONDS = 24 * 60 * 60;
@@ -63,12 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const walletEditForm = byId<HTMLFormElement>('walletEditForm');
   const walletName = byId<HTMLInputElement>('walletName');
   const walletAddress = byId<HTMLInputElement>('walletAddress');
-  const walletOwner = byId<HTMLInputElement>('walletOwner');
-  const ownerNames = byId<HTMLDataListElement>('ownerNames');
+  const walletGroup = byId<HTMLInputElement>('walletGroup');
+  const walletGroups = byId<HTMLDataListElement>('walletGroups');
   const walletSaveBtn = byId<HTMLButtonElement>('walletSaveBtn');
   const walletCancelBtn = byId<HTMLButtonElement>('walletCancelBtn');
   const csvFormatSelect = byId<HTMLSelectElement>('csvFormat');
-  const ownerFormats = byId<HTMLElement>('ownerFormats');
   const mintSummarySelect = byId<HTMLSelectElement>('mintSummary');
   const backupSaveBtn = byId<HTMLButtonElement>('backupSaveBtn');
   const backupLoadBtn = byId<HTMLButtonElement>('backupLoadBtn');
@@ -118,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ---- Export Transactions ----
 
-  const selectedWallet = (): SavedWallet | null => settings.wallets.find(wallet => wallet.id === walletSelect.value) ?? null;
+  const selectedWallet = (): SavedAddress | null => settings.addresses.find(saved => saved.id === walletSelect.value) ?? null;
 
   const selectedAddress = (): string => selectedWallet()?.address ?? addressInput.value.trim();
 
@@ -164,19 +163,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderWalletSelect = () => {
     const previous = walletSelect.value;
     walletSelect.textContent = '';
-    const names = owners(settings);
-    [...names, ''].forEach(owner => {
-      const wallets = walletsOf(settings, owner);
-      if (wallets.length === 0) return;
+    walletNames(settings).forEach(wallet => {
       const group = document.createElement('optgroup');
-      group.label = owner || (names.length > 0 ? 'No owner' : 'My wallets');
-      wallets.forEach(wallet => addOption(group, wallet.id, wallet.name));
+      group.label = wallet;
+      addressesOf(settings, wallet).forEach(saved => addOption(group, saved.id, saved.name));
       walletSelect.appendChild(group);
     });
     addOption(walletSelect, OTHER_ADDRESS, 'Other address…');
-    walletRow.hidden = settings.wallets.length === 0;
-    if (settings.wallets.length === 0) walletSelect.value = OTHER_ADDRESS;
-    else if (settings.wallets.some(wallet => wallet.id === previous)) walletSelect.value = previous;
+    walletRow.hidden = settings.addresses.length === 0;
+    if (settings.addresses.length === 0) walletSelect.value = OTHER_ADDRESS;
+    else if (settings.addresses.some(saved => saved.id === previous)) walletSelect.value = previous;
     else walletSelect.selectedIndex = 0;
   };
 
@@ -304,10 +300,12 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshAll();
   };
 
+  // The wallet stays filled in, to add its next address
   const stopEditing = () => {
     editingId = '';
-    walletEditForm.reset();
-    walletSaveBtn.textContent = 'Add wallet';
+    walletName.value = '';
+    walletAddress.value = '';
+    walletSaveBtn.textContent = 'Add address';
     walletCancelBtn.hidden = true;
   };
 
@@ -321,78 +319,106 @@ document.addEventListener('DOMContentLoaded', () => {
     return button;
   };
 
+  const addressRowFor = (saved: SavedAddress): HTMLElement => {
+    const row = document.createElement('div');
+    row.className = 'wallet-row';
+    const text = document.createElement('div');
+    text.className = 'wallet-text';
+    const title = document.createElement('strong');
+    title.textContent = saved.name;
+    const address = document.createElement('span');
+    address.textContent = saved.address;
+    text.append(title, address);
+    row.append(
+      text,
+      smallButton('Edit', `Edit ${saved.wallet}: ${saved.name}`, () => {
+        editingId = saved.id;
+        walletGroup.value = saved.wallet;
+        walletName.value = saved.name;
+        walletAddress.value = saved.address;
+        walletSaveBtn.textContent = 'Save address';
+        walletCancelBtn.hidden = false;
+        walletName.focus();
+      }),
+      smallButton('Delete', `Delete ${saved.wallet}: ${saved.name}`, () => {
+        if (!confirm(`Delete ${saved.name} from ${saved.wallet}?`)) return;
+        if (editingId === saved.id) stopEditing();
+        removeAddress(settings, saved.id);
+        settingsChanged(`${saved.name} deleted.`);
+      }),
+    );
+    return row;
+  };
+
+  const walletFormatFor = (wallet: string, id: string): HTMLElement => {
+    const row = document.createElement('div');
+    row.className = 'wallet-format';
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.textContent = 'CSV Format:';
+    const select = document.createElement('select');
+    select.id = id;
+    select.setAttribute('aria-label', `CSV Format for ${wallet}`);
+    addOption(select, '', `Default (${settings.csvFormat})`);
+    [CSVFormat.CoinLedger, CSVFormat.Koinly, CSVFormat.CoinTracker].forEach(format => addOption(select, format, format));
+    select.value = settings.walletFormats[wallet] ?? '';
+    select.addEventListener('change', () => {
+      setWalletFormat(settings, wallet, select.value as CSVFormat | '');
+      settingsChanged(`${wallet} format saved.`);
+    });
+    row.append(label, select);
+    return row;
+  };
+
   const renderConfig = () => {
+    const names = walletNames(settings);
     walletList.textContent = '';
-    const names = owners(settings);
-    if (settings.wallets.length === 0) {
+    if (names.length === 0) {
       const empty = document.createElement('p');
       empty.textContent = 'No wallets saved yet.';
       walletList.appendChild(empty);
     }
-    [...names, ''].forEach(owner => {
-      walletsOf(settings, owner).forEach(wallet => {
-        const row = document.createElement('div');
-        row.className = 'wallet-row';
-        const text = document.createElement('div');
-        text.className = 'wallet-text';
-        const title = document.createElement('strong');
-        title.textContent = wallet.owner ? `${wallet.owner}: ${wallet.name}` : wallet.name;
-        const address = document.createElement('span');
-        address.textContent = wallet.address;
-        text.append(title, address);
-        row.append(
-          text,
-          smallButton('Edit', `Edit ${wallet.name}`, () => {
-            editingId = wallet.id;
-            walletName.value = wallet.name;
-            walletAddress.value = wallet.address;
-            walletOwner.value = wallet.owner;
-            walletSaveBtn.textContent = 'Save wallet';
-            walletCancelBtn.hidden = false;
-            walletName.focus();
-          }),
-          smallButton('Delete', `Delete ${wallet.name}`, () => {
-            if (!confirm(`Delete ${wallet.name} from your saved wallets?`)) return;
-            if (editingId === wallet.id) stopEditing();
-            removeWallet(settings, wallet.id);
-            settingsChanged(`${wallet.name} deleted.`);
-          }),
-        );
-        walletList.appendChild(row);
-      });
+    names.forEach((wallet, index) => {
+      const group = document.createElement('section');
+      group.className = 'wallet-group';
+      const heading = document.createElement('div');
+      heading.className = 'wallet-heading';
+      const title = document.createElement('h4');
+      title.textContent = wallet;
+      heading.append(
+        title,
+        smallButton('Rename', `Rename ${wallet}`, () => {
+          const newName = prompt('New name for this wallet:', wallet);
+          if (newName === null) return;
+          const problem = renameWallet(settings, wallet, newName);
+          if (problem) {
+            configStatus.textContent = problem;
+            return;
+          }
+          if (walletGroup.value === wallet) walletGroup.value = newName.trim();
+          settingsChanged('Wallet renamed.');
+        }),
+        smallButton('Add address', `Add an address to ${wallet}`, () => {
+          stopEditing();
+          walletGroup.value = wallet;
+          walletName.focus();
+        }),
+      );
+      group.append(heading, walletFormatFor(wallet, `walletFormat${index}`), ...addressesOf(settings, wallet).map(addressRowFor));
+      walletList.appendChild(group);
     });
 
-    ownerNames.textContent = '';
-    names.forEach(owner => addOption(ownerNames, owner, owner));
+    walletGroups.textContent = '';
+    names.forEach(wallet => addOption(walletGroups, wallet, wallet));
 
     csvFormatSelect.value = settings.csvFormat;
     mintSummarySelect.value = settings.mintSummary;
-
-    ownerFormats.textContent = '';
-    names.forEach((owner, index) => {
-      const row = document.createElement('div');
-      row.className = 'owner-row';
-      const label = document.createElement('label');
-      label.htmlFor = `ownerFormat${index}`;
-      label.textContent = `${owner}:`;
-      const select = document.createElement('select');
-      select.id = `ownerFormat${index}`;
-      addOption(select, '', `Default (${settings.csvFormat})`);
-      [CSVFormat.CoinLedger, CSVFormat.Koinly, CSVFormat.CoinTracker].forEach(format => addOption(select, format, format));
-      select.value = settings.ownerFormats[owner] ?? '';
-      select.addEventListener('change', () => {
-        if (select.value === '') delete settings.ownerFormats[owner];
-        else settings.ownerFormats[owner] = select.value as CSVFormat;
-        settingsChanged(`${owner} format saved.`);
-      });
-      row.append(label, select);
-      ownerFormats.appendChild(row);
-    });
+    mintSummarySelect.disabled = !usesKoinly(settings);
   };
 
   walletEditForm.addEventListener('submit', event => {
     event.preventDefault();
-    const problem = putWallet(settings, editingId, walletName.value, walletAddress.value, walletOwner.value);
+    const problem = putAddress(settings, editingId, walletGroup.value, walletName.value, walletAddress.value);
     if (problem) {
       configStatus.textContent = problem;
       return;
@@ -409,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   csvFormatSelect.addEventListener('change', () => {
-    settings.csvFormat = csvFormatSelect.value as CSVFormat;
+    setDefaultFormat(settings, csvFormatSelect.value as CSVFormat);
     settingsChanged('CSV format saved.');
   });
 
@@ -430,10 +456,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!file) return;
     try {
       const loaded = parseSettings(await file.text());
-      if (settings.wallets.length > 0 && !confirm(`Replace your ${settings.wallets.length} saved wallets and settings with this backup?`)) return;
+      if (settings.addresses.length > 0 && !confirm(`Replace your ${settings.addresses.length} saved addresses and settings with this backup?`)) return;
       settings = loaded;
       stopEditing();
-      settingsChanged(`Backup loaded: ${settings.wallets.length} wallets.`);
+      settingsChanged(`Backup loaded: ${settings.addresses.length} addresses.`);
     } catch (error) {
       configStatus.textContent = error instanceof Error ? error.message : 'This is not a FluxExport settings file.';
     } finally {
