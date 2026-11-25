@@ -9,6 +9,8 @@ CoinTracker.io
 https://support.cointracker.io/hc/en-us/articles/4413071299729-Convert-your-transaction-history-to-CoinTracker-CSV
 https://support.cointracker.io/hc/en-us/articles/4413049710225-Transaction-category-definitions
 
+Referral link - 20% discount, earn 20% of their subscription https://cointracker.cello.so/cOM1jhoGB7D
+
 KOinly.io
 https://support.koinly.io/en/articles/9489976-how-to-create-a-custom-csv-file-with-your-data
 https://support.koinly.io/en/articles/9490023-what-are-tags
@@ -21,6 +23,8 @@ https://help.coinledger.io/en/articles/6028758-universal-manual-import-template-
 I would like to add an option to the user to group the transactions by day, week, month or single transactions. 
 */
 
+
+import { MissingPriceError, clearPrices, requirePrice, startPriceRun } from "./prices.js";
 
 interface Txid {
   txid: string;
@@ -88,11 +92,6 @@ interface vsum {
   [key: string]: number;
 }
 
-interface FluxPricePoint {
-  timestamp: number;
-  price: number;
-}
-
 export enum MintSummaryPeriod {
   None = "None",
   Hourly = "Hourly",
@@ -124,7 +123,9 @@ export let endDate: number = 0;
 let csvHeader: string = "";
 var csvRecord: any;
 let csvSent: string = "SENT";
+let csvService: string = csvSent;
 let csvReceived: string = "RECEIVED";
+let csvBridge: string = csvReceived;
 let csvMined: string = "MINED";
 let mintSummary: MintSummaryPeriod = MintSummaryPeriod.None;
 
@@ -154,73 +155,6 @@ function getWalletName(adr: string) : string {
   return adr;
 }
 
-const HOUR_IN_SECONDS = 60 * 60;
-let cachedFluxPrices: FluxPricePoint[] | null = null;
-let loadingFluxPrices: Promise<FluxPricePoint[] | null> | null = null;
-
-function isFluxPricePoint(entry: unknown): entry is FluxPricePoint {
-  return typeof entry === "object" &&
-    entry !== null &&
-    typeof (entry as FluxPricePoint).timestamp === "number" &&
-    typeof (entry as FluxPricePoint).price === "number";
-}
-
-function cacheFluxPricePoint(timestamp: number, price: number): void {
-  if (!Number.isFinite(price) || price === 0) return;
-  if (!cachedFluxPrices) cachedFluxPrices = [];
-  let low = 0;
-  let high = cachedFluxPrices.length - 1;
-  let insertIdx = cachedFluxPrices.length;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const midTimestamp = cachedFluxPrices[mid].timestamp;
-    if (midTimestamp === timestamp) {
-      cachedFluxPrices[mid] = { timestamp, price };
-      return;
-    }
-    if (midTimestamp < timestamp) {
-      low = mid + 1;
-    } else {
-      insertIdx = mid;
-      high = mid - 1;
-    }
-  }
-  cachedFluxPrices.splice(insertIdx, 0, { timestamp, price });
-}
-
-async function loadFluxPrices(): Promise<FluxPricePoint[] | null> {
-  if (cachedFluxPrices) return cachedFluxPrices;
-  if (loadingFluxPrices) return loadingFluxPrices;
-
-  loadingFluxPrices = (async () => {
-    try {
-      // wallet.js sits next to flux.json in dist/, so a local relative URL works when served.
-      const fluxUrl = new URL('./flux.json', import.meta.url);
-      const response = await fetch(fluxUrl);
-      if (!response.ok) {
-        console.error(`Failed to load flux.json (${fluxUrl}): ${response.status} ${response.statusText}`);
-        return null;
-      }
-      const data = await response.json();
-      const parsed: FluxPricePoint[] = Array.isArray(data?.prices) ? data.prices.filter(isFluxPricePoint) : [];
-      cachedFluxPrices = parsed.sort((a, b) => a.timestamp - b.timestamp);
-      return cachedFluxPrices;
-    } catch (error) {
-      console.error('Error loading flux.json', error);
-      return null;
-    } finally {
-      loadingFluxPrices = null;
-    }
-  })();
-
-  return loadingFluxPrices;
-}
-
-async function liveUpdates(dateTime: number): Promise<number | null> {
-  console.warn(`liveUpdates stub called for ${dateTime}; live price fetch not implemented yet.`);
-  return null;
-}
-
 interface MintSummaryState {
   periodStart: number;
   periodEnd: number;
@@ -236,8 +170,7 @@ function resetMintSummary(): void {
 }
 
 export async function clearCaches(): Promise<void> {
-  cachedFluxPrices = null;
-  loadingFluxPrices = null;
+  clearPrices();
   txnCacheMemory.clear();
   const db = await openTxnCache();
   if (!db) return;
@@ -454,37 +387,6 @@ function finalizeMintSummary(data: string[]): void {
   resetMintSummary();
 }
 
-export async function getPrice(dateTime: number): Promise<number | null> {
-  const prices = await loadFluxPrices();
-  const pricePoints = prices ?? [];
-  if (!prices && cachedFluxPrices === null) {
-    cachedFluxPrices = pricePoints;
-  }
-  if (pricePoints.length > 0) {
-    let low = 0;
-    let high = pricePoints.length - 1;
-    let idx = -1;
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      if (pricePoints[mid].timestamp <= dateTime) {
-        idx = mid;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-    if (idx !== -1) {
-      const candidate = pricePoints[idx];
-      const next = pricePoints[idx + 1];
-      const windowEnd = next ? next.timestamp : candidate.timestamp + HOUR_IN_SECONDS;
-      if (dateTime < windowEnd) return candidate.price;
-    }
-  }
-  const livePrice = await liveUpdates(dateTime);
-  if (livePrice && livePrice !== 0) cacheFluxPricePoint(dateTime, livePrice);
-  return livePrice;
-}
-
 // Setter functions
 export function setSingle(value: boolean): void {
   single = value;
@@ -505,12 +407,15 @@ export function setCsvFormat(value: CSVFormat): void {
     csvHeader = "Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag";
     csvSent = "";
     csvReceived = "payment";
-    csvMined = "mining";
+    csvBridge = "bridge";
+    csvService = "Service";
+    csvMined = "Staking";
   }
   if (csvFormat === CSVFormat.CoinLedger) {
     csvRecord = send_csv_cl;
     csvHeader = "Date (UTC),Platform (Optional),Asset Sent,Amount Sent,Asset Received,Amount Received,Fee Currency (Optional),Fee Amount (Optional),Type,Description (Optional),TxHash (Optional)";
     csvSent = "Merchant Payment";
+    csvService = csvSent;
     csvReceived = "Income";
     csvMined = "Mining";
   }
@@ -518,6 +423,7 @@ export function setCsvFormat(value: CSVFormat): void {
     csvRecord = send_csv_ko;
     csvHeader = "Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Net Worth Amount,Net Worth Currency,Label,Description,TxHash";
     csvSent = "Swap";
+    csvService = csvSent;
     csvReceived = "Income";
     csvMined = "Mining";
   }
@@ -561,13 +467,13 @@ export function parseDateToEpoch(dateTimeStr: string): number {
 // Existing functions from wallet.ts
 export function formatTimestamp(epochTime: number, usa: boolean): string {
   const date = new Date(epochTime * 1000);
-  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
-  const day = String(date.getDate()).padStart(2, '0');
-  const year = date.getFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Months are 0-based
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const year = date.getUTCFullYear();
 
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
   // Combine components into the desired format
   if (usa) return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
@@ -577,13 +483,13 @@ export function formatTimestamp(epochTime: number, usa: boolean): string {
 
 export function formatTimestampKO(epochTime: number): string {
   const date = new Date(epochTime * 1000);
-  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
-  const day = String(date.getDate()).padStart(2, '0');
-  const year = date.getFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Months are 0-based
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const year = date.getUTCFullYear();
 
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
   // Combine components into the desired format
 
@@ -782,7 +688,8 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         }
     });
   }
-  coin_value = (await getPrice(dateTime)) ?? 0.75;
+  // Only the Koinly format has a USD column
+  coin_value = csvFormat === CSVFormat.Koinly ? await requirePrice(dateTime, txid) : 0;
   console.log(`Time is ${dateTime} price ${coin_value}`);
   var msg: string = "";
   var type: string = "";
@@ -852,13 +759,18 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
       msg = msg + getWalletName(inAdr) + " ";
     });
     if (single) console.log(`Sender ${send_adr} ${msg}`);
+    const swapPoolSender: boolean =
+      getWalletName(send_adr) === 'Flux Swap Pool Hot' ||
+      Object.keys(vinsum).some((adr) => getWalletName(adr) === 'Flux Swap Pool Hot');
     if (hasVin) {
       if (single) {
         console.log("has vin, vout list");
         console.log(voutList);
       }
-      type = csvSent;
       Object.keys(voutList).forEach(outAdr => {
+        type = csvSent;
+        if (getWalletName(outAdr) == 'Flux App Deployment') type = csvService;
+        if (getWalletName(outAdr) == 'Flux Swap Pool Hot') type = csvBridge;
         if (outAdr !== myAddress) {
           send_qty = voutList[outAdr];
           send_coin = "FLUX";
@@ -866,7 +778,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           send_comment = `Address: ${getWalletName(outAdr)}`;
           gas_coin = "FLUX";
           gas_usd = (gas_fee as number) * coin_value/100000000;
-          console.log(`send_usd ${send_usd} gas ${gas_usd}`);
+          console.log(`send_usd ${send_usd} gas ${gas_usd} ${type} swap ${swapPoolSender}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
             send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
           gas_fee = 0;
@@ -877,15 +789,18 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         console.log("vout list");
         console.log(voutList);
       }
-      type = csvReceived;
       Object.keys(voutList).forEach(outAdr => {
+        type = swapPoolSender ? csvBridge : csvReceived;
+        console.log(`recv ${swapPoolSender} is ${send_adr} ${type}`);
+        if (single) console.log(`recv ${getWalletName(send_adr)} is ${send_adr} ${type}`);
         if (outAdr === myAddress) {
           recv_qty = voutList[outAdr];
+          console.log(`recv ${send_adr} => ${outAdr} ${type} ${recv_qty}`)
           recv_coin = "FLUX";
           recv_usd = recv_qty * coin_value/100000000;
           recv_comment = msg;
           gas_fee = ''; // No fee to  receive
-          console.log(`${recv_qty} ${coin_value} ${recv_coin} usd ${recv_usd}`);
+          console.log(`recv ${recv_qty} ${coin_value} ${recv_coin} usd ${recv_usd} ${type}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
             send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
         }
@@ -912,6 +827,7 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
     let rows: number = 0;
     let numtxn : number = 0;
     resetMintSummary();
+    startPriceRun();
     if (!TXNs || !TXNs.data) {
       console.log(responseData);
       console.error("Invalid response structure.");
@@ -1005,6 +921,7 @@ async function scanWalletData(updateStatus: (message: string) => void, responseD
     await sleep(2000);
     return {data, rows};
   } catch (error) {
+    if (error instanceof MissingPriceError) throw error;
     console.error("Error parsing or processing wallet data:", error);
   }
   const data:string[] = ["Error parsing or processing wallet data"];

@@ -24,6 +24,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const startDateInput = document.getElementById('startDate') as HTMLInputElement;
     const endDateInput = document.getElementById('endDate') as HTMLInputElement;
     const watchedInputs = [addressInput, csvFormatSelect, mintSummarySelect, startDateInput, endDateInput];
+    const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.format-tabs .tab'));
+    const tabPanels = Array.from(document.querySelectorAll<HTMLElement>('.format-tabs .tab-panel'));
+    const demoLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.demo-steps a'));
 
     const disableDownloadBtn = (message?: string) => {
       downloadBtn.disabled = true;
@@ -51,6 +54,20 @@ document.addEventListener('DOMContentLoaded', () => {
       input.addEventListener(eventType, handleInputChange);
     });
 
+    const setActiveTab = (format: string) => {
+      tabButtons.forEach((btn) => {
+        const isActive = btn.dataset.format === format;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        btn.setAttribute('tabindex', isActive ? '0' : '-1');
+      });
+      tabPanels.forEach((panel) => {
+        const isActive = panel.dataset.format === format;
+        panel.classList.toggle('active', isActive);
+        panel.hidden = !isActive;
+      });
+    };
+
     const updateMintSummaryAvailability = () => {
       const isKoinly = csvFormatSelect.value === CSVFormat.Koinly;
       if (!isKoinly) {
@@ -63,7 +80,61 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    csvFormatSelect.addEventListener('change', updateMintSummaryAvailability);
+    csvFormatSelect.addEventListener('change', () => {
+      updateMintSummaryAvailability();
+      setActiveTab(csvFormatSelect.value);
+    });
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const format = btn.dataset.format;
+        if (!format) return;
+        csvFormatSelect.value = format;
+        csvFormatSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+
+    // Simple lightbox for demo images
+    const lightbox = document.createElement('div');
+    lightbox.className = 'image-lightbox';
+    const lightboxImg = document.createElement('img');
+    lightbox.appendChild(lightboxImg);
+    let lightboxActive = false;
+
+    const closeLightbox = () => {
+      if (!lightboxActive) return;
+      lightbox.classList.remove('visible');
+      setTimeout(() => {
+        if (lightbox.parentElement) lightbox.parentElement.removeChild(lightbox);
+      }, 140);
+      lightboxActive = false;
+      document.removeEventListener('keydown', handleEscape);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeLightbox();
+    };
+
+    lightbox.addEventListener('click', closeLightbox);
+
+    const openLightbox = (src: string, alt?: string) => {
+      lightboxImg.src = src;
+      lightboxImg.alt = alt ?? '';
+      if (!lightbox.parentElement) document.body.appendChild(lightbox);
+      requestAnimationFrame(() => lightbox.classList.add('visible'));
+      lightboxActive = true;
+      document.addEventListener('keydown', handleEscape);
+    };
+
+    demoLinks.forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const img = link.querySelector('img');
+        const src = link.getAttribute('href') || img?.src;
+        if (!src) return;
+        openLightbox(src, img?.alt ?? '');
+      });
+    });
+
     clearCacheBtn?.addEventListener('click', async () => {
       await clearCaches();
       updateStatusMessage('Cache cleared.');
@@ -88,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialMintSummary = mintSummarySelect.value as keyof typeof MintSummaryPeriod;
     setMintSummary(MintSummaryPeriod[initialMintSummary]);
     updateMintSummaryAvailability();
+    setActiveTab(csvFormatSelect.value);
     updateCacheInfo();
   
     // Handle form submission
@@ -169,6 +241,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }).catch((error) => {
             console.error('Error while fetching wallet:', error);
+            cvsDownloadData = "";
+            const message = error instanceof Error ? error.message : 'Unable to read this wallet.';
+            disableDownloadBtn('Export failed, no file to download.');
+            updateStatusMessage(message);
         });
         
     });
