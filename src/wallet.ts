@@ -125,9 +125,13 @@ var csvRecord: any;
 let csvSent: string = "SENT";
 let csvService: string = csvSent;
 let csvReceived: string = "RECEIVED";
-let csvBridge: string = csvReceived;
+let csvBridgeIn: string = csvReceived;
+let csvBridgeOut: string = csvSent;
+let csvTransferIn: string = csvReceived; // from and to the owner's other addresses
+let csvTransferOut: string = csvSent;
 let csvMined: string = "MINED";
 let mintSummary: MintSummaryPeriod = MintSummaryPeriod.None;
+let ownAddresses: Set<string> = new Set();
 
 // Well known Flux Wallets
 
@@ -331,7 +335,6 @@ function flushMintSummaryUpTo(cutoff: number, data: string[]): void {
         "",
         mintState.recvUsd,
         "USD",
-        "",
         ""
       ));
     }
@@ -380,7 +383,6 @@ function finalizeMintSummary(data: string[]): void {
       "",
       mintState.recvUsd,
       "USD",
-      "",
       ""
     ));
   }
@@ -396,6 +398,11 @@ export function setAddress(value: string): void {
   Address = value;
 }
 
+/** The addresses with the same owner as the one exported. */
+export function setOwnAddresses(addresses: string[]): void {
+  ownAddresses = new Set(addresses);
+}
+
 export function setTestTxid(value: string): void {
   testTxid = value;
 }
@@ -407,7 +414,10 @@ export function setCsvFormat(value: CSVFormat): void {
     csvHeader = "Date,Received Quantity,Received Currency,Sent Quantity,Sent Currency,Fee Amount,Fee Currency,Tag";
     csvSent = "";
     csvReceived = "payment";
-    csvBridge = "bridge";
+    csvBridgeIn = "bridge";
+    csvBridgeOut = csvBridgeIn;
+    csvTransferIn = "";
+    csvTransferOut = "";
     csvService = "Service";
     csvMined = "staking";
   }
@@ -417,14 +427,22 @@ export function setCsvFormat(value: CSVFormat): void {
     csvSent = "Merchant Payment";
     csvService = csvSent;
     csvReceived = "Income";
+    csvTransferIn = "Deposit"; // CoinLedger: non-taxable self-transfer
+    csvTransferOut = "Withdrawal";
+    csvBridgeIn = csvTransferIn; // there is no bridge type in the file, the two are merged in CoinLedger
+    csvBridgeOut = csvTransferOut;
     csvMined = "Mining";
   }
   if (csvFormat === CSVFormat.Koinly) {
     csvRecord = send_csv_ko;
     csvHeader = "Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Net Worth Amount,Net Worth Currency,Label,Description,TxHash";
-    csvSent = "Swap";
-    csvService = csvSent;
-    csvReceived = "Income";
+    csvSent = ""; // Koinly ignores Swap in a file
+    csvService = "cost";
+    csvReceived = "other income";
+    csvTransferIn = "";
+    csvTransferOut = "";
+    csvBridgeIn = "";
+    csvBridgeOut = "";
     csvMined = "Mining";
   }
   if (csvFormat !== CSVFormat.Koinly) setMintSummary(MintSummaryPeriod.None);
@@ -546,7 +564,7 @@ function isValidTxid(txid: string): boolean {
 
 function send_csv_ct(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any,
-  send_coin: string, send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
+  send_coin: string, send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string
 ): string {
   const date:string = formatTimestamp(dateTime, true);
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
@@ -560,7 +578,7 @@ function send_csv_ct(
 
 function send_csv_cl(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string,
-  send_comment: string, gas_fee: string | number, gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
+  send_comment: string, gas_fee: string | number, gas_coin: string, net_usd: string | number, currency: string, txid: string
 ): string {
   const date:string = formatTimestamp(dateTime, true);
   if (tag == csvSent) {
@@ -583,14 +601,14 @@ function send_csv_cl(
     if (send_comment.length > 0) comment = comment + ", " + send_comment;
   } else comment = send_comment;
   const csvRow = [
-    date, "", send_coin, send_qty, recv_coin, recv_qty, gas_coin, gas_fee, tag, comment, hash
+    date, "", send_coin, send_qty, recv_coin, recv_qty, gas_coin, gas_fee, tag, comment, txid
   ].join(",");
   return csvRow;
 }
 
 function send_csv_ko(
   dateTime: number, tag: string, recv_qty: string | number, recv_coin: string, recv_comment: string, send_qty: any, send_coin: string,
-  send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string, hash: string
+  send_comment: string, gas_fee: string | number,  gas_coin: string, net_usd: string | number, currency: string, txid: string
 ): string {
   const date:string = formatTimestampKO(dateTime); // UTC format needed
   if (typeof recv_qty === "number" && recv_qty > 0) recv_qty = trimZeros((recv_qty/100000000).toFixed(8));
@@ -604,7 +622,7 @@ function send_csv_ko(
     if (send_comment.length > 0) comment = comment + ", " + send_comment;
   } else comment = send_comment;
   const csvRow = [
-    date, send_qty, send_coin, recv_qty, recv_coin, gas_fee, gas_coin, net_usd, currency, tag, comment, hash
+    date, send_qty, send_coin, recv_qty, recv_coin, gas_fee, gas_coin, net_usd, currency, tag, comment, txid
   ].join(",");
   return csvRow;
 }
@@ -656,7 +674,6 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
   const dateTime: number = txn.data.time;
   var coin_value: number;
   const txid: string = txn.data.txid
-  const hash: string = txn.data.blockhash;
 
   if (txn.data.vin !== undefined) {
     txn.data.vin.forEach(vin => {
@@ -725,7 +742,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     console.log(`usd gas ${gas_usd}`);
     if (gas_fee > 0) { // if qty and gas 0, nothing to see here
       data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-        send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
+        send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid));
     }
   } else if (mined) {
     if (single) console.log("Mined");
@@ -738,7 +755,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     gas_usd = 0;
     if (mintSummary === MintSummaryPeriod.None) {
       data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-        send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
+        send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid));
     } else {
       addMintRecord(dateTime, recv_qty as number, recv_usd as number, data);
     }
@@ -759,6 +776,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     // Mining rewards the owner claimed by hand
     const rewardsClaim: boolean =
       Object.keys(vinsum).some((adr) => getWalletName(adr) === 'Flux Mining Rewards Pool');
+    const ownSender: boolean = Object.keys(vinsum).length > 0 && Object.keys(vinsum).every((adr) => ownAddresses.has(adr));
     if (hasVin) {
       if (single) {
         console.log("has vin, vout list");
@@ -767,7 +785,8 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
       Object.keys(voutList).forEach(outAdr => {
         type = csvSent;
         if (getWalletName(outAdr) == 'Flux App Deployment') type = csvService;
-        if (getWalletName(outAdr) == 'Flux Swap Pool Hot') type = csvBridge;
+        if (getWalletName(outAdr) == 'Flux Swap Pool Hot') type = csvBridgeOut;
+        if (ownAddresses.has(outAdr)) type = csvTransferOut;
         if (outAdr !== myAddress) {
           send_qty = voutList[outAdr];
           send_coin = "FLUX";
@@ -777,7 +796,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           gas_usd = (gas_fee as number) * coin_value/100000000;
           console.log(`send_usd ${send_usd} gas ${gas_usd} ${type} swap ${swapPoolSender}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-            send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid, hash));
+            send_qty, send_coin, send_comment, gas_fee, gas_coin, send_usd, "USD", txid));
           gas_fee = 0;
         }
       });
@@ -787,7 +806,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         console.log(voutList);
       }
       Object.keys(voutList).forEach(outAdr => {
-        type = swapPoolSender ? csvBridge : rewardsClaim ? csvMined : csvReceived;
+        type = swapPoolSender ? csvBridgeIn : rewardsClaim ? csvMined : ownSender ? csvTransferIn : csvReceived;
         console.log(`recv ${swapPoolSender} is ${send_adr} ${type}`);
         if (single) console.log(`recv ${getWalletName(send_adr)} is ${send_adr} ${type}`);
         if (outAdr === myAddress) {
@@ -799,7 +818,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
           gas_fee = ''; // No fee to  receive
           console.log(`recv ${recv_qty} ${coin_value} ${recv_coin} usd ${recv_usd} ${type}`);
           data.push(csvRecord(dateTime, type, recv_qty, recv_coin, recv_comment,
-            send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid, hash));
+            send_qty, send_coin, send_comment, gas_fee, gas_coin, recv_usd, "USD", txid));
         }
       });
     } else {

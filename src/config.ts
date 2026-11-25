@@ -185,6 +185,16 @@ export function setWalletFormat(settings: Settings, wallet: string, format: CSVF
   tidy(settings);
 }
 
+/** Addresses with the same owner as this one: in the same wallet, or in wallets of the same company. */
+export function ownAddressesOf(settings: Settings, address: string): string[] {
+  const wallet = settings.addresses.find(saved => saved.address === address)?.wallet;
+  if (wallet === undefined) return [];
+  const company = settings.walletCompanies[wallet];
+  return settings.addresses
+    .filter(saved => saved.wallet === wallet || (company && settings.walletCompanies[saved.wallet] === company))
+    .map(saved => saved.address);
+}
+
 export function companies(settings: Settings): string[] {
   return Array.from(new Set(Object.values(settings.walletCompanies))).sort((a, b) => a.localeCompare(b));
 }
