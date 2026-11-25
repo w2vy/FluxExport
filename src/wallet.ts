@@ -143,8 +143,8 @@ const KnownWallets: { [key: string]: string } = {
   t3PMbbA5YBMrjSD3dD16SSdXKuKovwmj6tS: 'Flux Listings Locked',
   t3ThbWogDoAjGuS6DEnmN1GWJBRbVjSUK4T: 'Flux Swap Pool Locked',
   t3heoBJT9gn9mne7Q5aynajJo7tReyDv2NV: 'Flux Swap Pool Locked',
-  t1Yum7okNzR5kW84dfgwqB23yy1BCcpHFPq: 'Flux Coinbase Pool Hot',
-  t1Zj9vUsAMoG4M9LSy5ahDzZUmokKGXqwcT: 'Flux Coinbase Pool Hot',
+  t1Yum7okNzR5kW84dfgwqB23yy1BCcpHFPq: 'Flux Mining Rewards Pool',
+  t1Zj9vUsAMoG4M9LSy5ahDzZUmokKGXqwcT: 'Flux Mining Rewards Pool',
   t1ZLpyVr6hs3vAH7qKujJRpu17G3VdxAkrY: 'Flux Swap Pool Cold',
   t1SHUuYiE8UT7Hnu9Qr3QcGu3W4L55W98pU: 'Flux Swap Pool Hot',
   t3NryfAQLGeFs9jEoeqsxmBN2QLRaRKFLUX: 'Flux App Deployment'
@@ -409,7 +409,7 @@ export function setCsvFormat(value: CSVFormat): void {
     csvReceived = "payment";
     csvBridge = "bridge";
     csvService = "Service";
-    csvMined = "Staking";
+    csvMined = "staking";
   }
   if (csvFormat === CSVFormat.CoinLedger) {
     csvRecord = send_csv_cl;
@@ -443,7 +443,7 @@ export function setMintSummary(value: MintSummaryPeriod): void {
   resetMintSummary();
 }
 
-// Utility to format date and time to epoch time
+// Utility to format date and time (UTC, the same as the exported dates) to epoch time
 export function parseDateToEpoch(dateTimeStr: string): number {
   // Split date and time components
   const [datePart, timePart] = dateTimeStr.split("T");
@@ -455,7 +455,7 @@ export function parseDateToEpoch(dateTimeStr: string): number {
     [hours, minutes] = timePart.split(":").map(Number);
   }
   // Create the date object
-  const date = new Date(year, month - 1, day, hours, minutes);
+  const date = new Date(Date.UTC(year, month - 1, day, hours, minutes));
   // Check if the date is valid
   if (isNaN(date.getTime())) {
     throw new Error(`Invalid date or time format: ${dateTimeStr}`);
@@ -762,6 +762,9 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
     const swapPoolSender: boolean =
       getWalletName(send_adr) === 'Flux Swap Pool Hot' ||
       Object.keys(vinsum).some((adr) => getWalletName(adr) === 'Flux Swap Pool Hot');
+    // Mining rewards the owner claimed by hand
+    const rewardsClaim: boolean =
+      Object.keys(vinsum).some((adr) => getWalletName(adr) === 'Flux Mining Rewards Pool');
     if (hasVin) {
       if (single) {
         console.log("has vin, vout list");
@@ -790,7 +793,7 @@ export async function decodeTransaction(txn: Txn, myAddress:string): Promise<str
         console.log(voutList);
       }
       Object.keys(voutList).forEach(outAdr => {
-        type = swapPoolSender ? csvBridge : csvReceived;
+        type = swapPoolSender ? csvBridge : rewardsClaim ? csvMined : csvReceived;
         console.log(`recv ${swapPoolSender} is ${send_adr} ${type}`);
         if (single) console.log(`recv ${getWalletName(send_adr)} is ${send_adr} ${type}`);
         if (outAdr === myAddress) {
